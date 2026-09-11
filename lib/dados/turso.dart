@@ -165,8 +165,9 @@ class Turso {
         final chaveLoja = normalizar(linha.loja);
         var lojaId = lojasPorNome[chaveLoja];
         if (lojaId == null) {
+          // COLLATE NOCASE para "Assai" e "ASSAI" nao virarem duas lojas.
           final achada = await transacao.query(
-            'SELECT id FROM lojas WHERE nome = ?',
+            'SELECT id FROM lojas WHERE nome = ? COLLATE NOCASE',
             positional: [linha.loja],
           );
           if (achada.isNotEmpty) {
@@ -177,7 +178,7 @@ class Turso {
               positional: [linha.loja],
             );
             final nova = await transacao.query(
-              'SELECT id FROM lojas WHERE nome = ?',
+              'SELECT id FROM lojas WHERE nome = ? COLLATE NOCASE',
               positional: [linha.loja],
             );
             lojaId = comoInt(nova.first['id'])!;

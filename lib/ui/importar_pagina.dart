@@ -89,8 +89,8 @@ class _ImportarPaginaState extends State<ImportarPagina> {
       return;
     }
 
-    // Confere no banco o que ja existe. Sem internet, mostramos a previa
-    // apenas com o que da para saber pelo arquivo.
+    // Confere no banco o que ja existe. Sem conexao nao da para saber o que
+    // seria duplicado, e gravar tambem exige conexao, entao avisamos aqui.
     PreviaBanco? banco;
     Turso? conexao;
     try {

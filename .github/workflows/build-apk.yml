@@ -29,12 +29,6 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Instalar o Rust
-        # O pacote libsql_dart compila uma parte em Rust para o Android.
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
-
       - name: Baixar as dependencias
         run: flutter pub get
 
@@ -45,7 +39,9 @@ jobs:
         run: flutter test
 
       - name: Compilar o APK de release
-        run: flutter build apk --release
+        # Somente as arquiteturas de celular (ARM). Sem o x86_64, que so
+        # serve para emulador, o arquivo fica cerca de 30 MB menor.
+        run: flutter build apk --release --target-platform android-arm,android-arm64
 
       - name: Guardar o APK para download
         uses: actions/upload-artifact@v4
