@@ -40,7 +40,7 @@ jobs:
 
       - name: Compilar o APK de release
         # Somente as arquiteturas de celular (ARM). Sem o x86_64, que so
-        # serve para emulador, o arquivo fica cerca de 30 MB menor.
+        # serve para emulador, o APK cai de 78 MB para cerca de 50 MB.
         run: flutter build apk --release --target-platform android-arm,android-arm64
 
       - name: Guardar o APK para download

@@ -71,8 +71,8 @@ download:
 3. Em **Artifacts**, baixe `precos-supermercado-apk`.
 4. Descompacte o `.zip` no celular e instale o `app-release.apk`.
 
-O APK e compilado so para celular (ARM). Ele **nao roda em emulador x86_64**,
-o que deixa o arquivo cerca de 30 MB menor.
+O APK e compilado so para celular (ARM), o que deixa o arquivo em torno de
+50 MB em vez de 78 MB. Ele **nao roda em emulador x86_64**.
 
 ## Rodar a partir do codigo
 
