@@ -63,13 +63,20 @@ o mesmo produto duas vezes.
 
 ## Baixar o APK
 
-A cada push, o GitHub Actions compila o APK de release e deixa o arquivo para
-download:
+A cada push, o GitHub Actions compila o APK de release e publica na aba
+**Releases**, em "APK mais recente".
 
-1. Abra a aba **Actions** do repositorio.
-2. Clique na execucao mais recente de **Build APK**.
-3. Em **Artifacts**, baixe `precos-supermercado-apk`.
-4. Descompacte o `.zip` no celular e instale o `app-release.apk`.
+**Pelo celular (mais facil):** abra a release
+[`apk-mais-recente`](../../releases/tag/apk-mais-recente) e toque em
+`precos-de-mercado.apk`. E o arquivo direto, sem zip e sem precisar estar
+logado no GitHub. O link e sempre o mesmo e aponta sempre para a versao mais
+nova.
+
+**Pelo computador:** o mesmo APK tambem fica na aba **Actions**, na execucao
+mais recente de **Build APK**, em **Artifacts** (ali vem dentro de um `.zip`).
+
+Depois de baixar, o Android vai pedir para permitir a instalacao de
+aplicativos de fora da Play Store. E normal, porque o APK nao passa pela loja.
 
 O APK e compilado so para celular (ARM), o que deixa o arquivo em torno de
 50 MB em vez de 78 MB. Ele **nao roda em emulador x86_64**.

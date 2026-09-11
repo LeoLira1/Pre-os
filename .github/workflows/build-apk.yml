@@ -12,6 +12,9 @@ jobs:
   build:
     name: APK de release
     runs-on: ubuntu-latest
+    # Necessario para publicar o APK na aba Releases.
+    permissions:
+      contents: write
     steps:
       - name: Baixar o codigo
         uses: actions/checkout@v4
@@ -43,10 +46,38 @@ jobs:
         # serve para emulador, o APK cai de 78 MB para cerca de 50 MB.
         run: flutter build apk --release --target-platform android-arm,android-arm64
 
-      - name: Guardar o APK para download
+      - name: Guardar o APK como artifact
         uses: actions/upload-artifact@v4
         with:
           name: precos-supermercado-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publicar o APK na aba Releases
+        # So em push. Em pull request o token nao pode criar release.
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="apk-mais-recente"
+          cp build/app/outputs/flutter-apk/app-release.apk precos-de-mercado.apk
+
+          NOTAS="APK de release gerado automaticamente a cada push.
+
+          Toque em **precos-de-mercado.apk** aqui embaixo para baixar e instalar no celular.
+
+          - Commit: \`${GITHUB_SHA}\`
+          - Branch: \`${GITHUB_REF_NAME}\`
+          - Gerado em: $(date -u '+%d/%m/%Y as %H:%M UTC')
+
+          Compilado somente para celular (ARM). Nao roda em emulador x86_64."
+
+          # Recria a release para o tag apontar sempre para o commit mais novo
+          # e sobrar apenas um APK anexado.
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" precos-de-mercado.apk \
+            --title "APK mais recente" \
+            --notes "$NOTAS" \
+            --target "$GITHUB_SHA"
