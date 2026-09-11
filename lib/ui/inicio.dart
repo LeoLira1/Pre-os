@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../dados/estado_app.dart';
 import 'configuracao_pagina.dart';
 import 'importar_hub_pagina.dart';
+import 'juntar_produtos_pagina.dart';
 import 'produtos_pagina.dart';
 
 /// Casca do aplicativo com as tres abas: Produtos, Importar e Configuracao.
@@ -26,6 +27,7 @@ class _TelaInicioState extends State<TelaInicio> {
         final paginas = <Widget>[
           ProdutosPagina(estado: widget.estado),
           ImportarHubPagina(estado: widget.estado),
+          JuntarProdutosPagina(estado: widget.estado),
           ConfiguracaoPagina(estado: widget.estado),
         ];
         return Scaffold(
@@ -33,18 +35,27 @@ class _TelaInicioState extends State<TelaInicio> {
           bottomNavigationBar: NavigationBar(
             selectedIndex: _aba,
             onDestinationSelected: (indice) => setState(() => _aba = indice),
-            destinations: const [
-              NavigationDestination(
+            destinations: [
+              const NavigationDestination(
                 icon: Icon(Icons.shopping_basket_outlined),
                 selectedIcon: Icon(Icons.shopping_basket),
                 label: 'Produtos',
               ),
-              NavigationDestination(
+              const NavigationDestination(
                 icon: Icon(Icons.upload_file_outlined),
                 selectedIcon: Icon(Icons.upload_file),
                 label: 'Importar',
               ),
               NavigationDestination(
+                icon: Badge(
+                  isLabelVisible: widget.estado.sugestoesPendentes.isNotEmpty,
+                  label: Text('${widget.estado.sugestoesPendentes.length}'),
+                  child: const Icon(Icons.merge_type_outlined),
+                ),
+                selectedIcon: const Icon(Icons.merge_type),
+                label: 'Juntar',
+              ),
+              const NavigationDestination(
                 icon: Icon(Icons.settings_outlined),
                 selectedIcon: Icon(Icons.settings),
                 label: 'Configuracao',

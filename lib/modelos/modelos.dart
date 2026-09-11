@@ -86,6 +86,88 @@ class Produto {
       };
 }
 
+/// Produto base usado para comparar nomes diferentes entre lojas.
+class Grupo {
+  const Grupo({
+    required this.id,
+    required this.nome,
+    this.categoria,
+    this.unidadeRef,
+    this.criadoEm,
+  });
+
+  final int id;
+  final String nome;
+  final String? categoria;
+  final String? unidadeRef;
+  final String? criadoEm;
+
+  factory Grupo.doMapa(Map<String, dynamic> m) => Grupo(
+        id: comoInt(m['id'])!,
+        nome: comoTexto(m['nome']) ?? '',
+        categoria: comoTexto(m['categoria']),
+        unidadeRef: comoTexto(m['unidade_ref']),
+        criadoEm: comoTexto(m['criado_em']),
+      );
+
+  Map<String, dynamic> paraMapa() => {
+        'id': id,
+        'nome': nome,
+        'categoria': categoria,
+        'unidade_ref': unidadeRef,
+        'criado_em': criadoEm,
+      };
+}
+
+class ProdutoGrupo {
+  const ProdutoGrupo({
+    required this.produtoId,
+    required this.grupoId,
+    required this.origem,
+  });
+
+  final int produtoId;
+  final int grupoId;
+  final String origem;
+
+  factory ProdutoGrupo.doMapa(Map<String, dynamic> m) => ProdutoGrupo(
+        produtoId: comoInt(m['produto_id'])!,
+        grupoId: comoInt(m['grupo_id'])!,
+        origem: comoTexto(m['origem']) ?? 'automatico',
+      );
+
+  Map<String, dynamic> paraMapa() => {
+        'produto_id': produtoId,
+        'grupo_id': grupoId,
+        'origem': origem,
+      };
+}
+
+class SugestaoRejeitada {
+  const SugestaoRejeitada({
+    required this.produtoId,
+    required this.grupoId,
+    this.criadoEm,
+  });
+
+  final int produtoId;
+  final int grupoId;
+  final String? criadoEm;
+
+  factory SugestaoRejeitada.doMapa(Map<String, dynamic> m) =>
+      SugestaoRejeitada(
+        produtoId: comoInt(m['produto_id'])!,
+        grupoId: comoInt(m['grupo_id'])!,
+        criadoEm: comoTexto(m['criado_em']),
+      );
+
+  Map<String, dynamic> paraMapa() => {
+        'produto_id': produtoId,
+        'grupo_id': grupoId,
+        'criado_em': criadoEm,
+      };
+}
+
 class Preco {
   const Preco({
     required this.id,

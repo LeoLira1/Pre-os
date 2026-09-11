@@ -11,19 +11,19 @@ class ProdutoPagina extends StatelessWidget {
   const ProdutoPagina({
     super.key,
     required this.estado,
-    required this.produtoId,
+    required this.grupoId,
   });
 
   final EstadoApp estado;
-  final int produtoId;
+  final int grupoId;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: estado,
       builder: (context, _) {
-        final produto = estado.produtoPorId(produtoId);
-        if (produto == null) {
+        final grupo = estado.grupoPorId(grupoId);
+        if (grupo == null) {
           return Scaffold(
             appBar: AppBar(title: const Text('Produto')),
             body: const Center(
@@ -32,22 +32,31 @@ class ProdutoPagina extends StatelessWidget {
           );
         }
 
-        final precos = estado.precosDoProduto(produtoId);
+        final produtos = estado.produtosDoGrupo(grupoId);
+        final precos = estado.precosDoGrupo(grupoId);
         final estatisticas = EstatisticasProduto.calcular(precos);
         final historico = precos.reversed.toList();
 
         return Scaffold(
-          appBar: AppBar(title: Text(produto.nome)),
+          appBar: AppBar(title: Text(grupo.nome)),
           body: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
-              _Cabecalho(produto: produto),
+              _Cabecalho(grupo: grupo, produtos: produtos),
+              const SizedBox(height: 12),
+              _ProdutosDoGrupo(
+                estado: estado,
+                grupo: grupo,
+                produtos: produtos,
+              ),
               const SizedBox(height: 16),
               _Numeros(
                 estatisticas: estatisticas,
                 porLoja: compararLojas(
                   precos: precos,
                   nomeDaLoja: estado.nomeDaLoja,
+                  nomeDoProduto: (id) =>
+                      estado.produtoPorId(id)?.nome ?? 'Produto $id',
                 ),
                 nomeCurtoDaLoja: (id) =>
                     nomeCurtoLoja(estado.nomeDaLoja(id)),
@@ -91,6 +100,7 @@ class ProdutoPagina extends StatelessWidget {
                   _ItemHistorico(
                     preco: preco,
                     loja: nomeCurtoLoja(estado.nomeDaLoja(preco.lojaId)),
+                    produto: estado.produtoPorId(preco.produtoId)?.nome,
                   ),
             ],
           ),
@@ -101,22 +111,19 @@ class ProdutoPagina extends StatelessWidget {
 }
 
 class _Cabecalho extends StatelessWidget {
-  const _Cabecalho({required this.produto});
+  const _Cabecalho({required this.grupo, required this.produtos});
 
-  final Produto produto;
+  final Grupo grupo;
+  final List<Produto> produtos;
 
   @override
   Widget build(BuildContext context) {
     final textos = Theme.of(context).textTheme;
     final cores = Theme.of(context).colorScheme;
     final linhas = <String>[
-      if ((produto.marca ?? '').trim().isNotEmpty) 'Marca: ${produto.marca}',
-      if (produto.embalagemQtd != null ||
-          (produto.embalagemUnidade ?? '').trim().isNotEmpty)
-        'Embalagem: ${formatarEmbalagem(produto.embalagemQtd, produto.embalagemUnidade)}',
-      if ((produto.unidadeVenda ?? '').trim().isNotEmpty)
-        'Vendido por: ${produto.unidadeVenda}',
-      if ((produto.ean ?? '').trim().isNotEmpty) 'EAN: ${produto.ean}',
+      if ((grupo.unidadeRef ?? '').trim().isNotEmpty)
+        'Unidade de comparação: ${grupo.unidadeRef}',
+      '${produtos.length} produto${produtos.length == 1 ? '' : 's'} neste grupo',
     ];
 
     return Card(
@@ -126,13 +133,13 @@ class _Cabecalho extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              produto.nome,
+              grupo.nome,
               style: textos.titleLarge?.copyWith(fontWeight: FontWeight.w600),
             ),
-            if ((produto.categoria ?? '').trim().isNotEmpty) ...[
+            if ((grupo.categoria ?? '').trim().isNotEmpty) ...[
               const SizedBox(height: 8),
               Chip(
-                label: Text(produto.categoria!),
+                label: Text(grupo.categoria!),
                 visualDensity: VisualDensity.compact,
               ),
             ],
@@ -150,6 +157,168 @@ class _Cabecalho extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _ProdutosDoGrupo extends StatelessWidget {
+  const _ProdutosDoGrupo({
+    required this.estado,
+    required this.grupo,
+    required this.produtos,
+  });
+
+  final EstadoApp estado;
+  final Grupo grupo;
+  final List<Produto> produtos;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Produtos vinculados',
+                      style: Theme.of(context).textTheme.titleMedium),
+                ),
+                IconButton(
+                  tooltip: 'Renomear grupo',
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () => _renomear(context),
+                ),
+              ],
+            ),
+            for (final produto in produtos)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(produto.nome),
+                subtitle: Text([
+                  if ((produto.marca ?? '').isNotEmpty) produto.marca!,
+                  if (estado.gruposDoProduto(produto.id).length > 1)
+                    '${estado.gruposDoProduto(produto.id).length} grupos',
+                ].join(' · ')),
+                trailing: PopupMenuButton<String>(
+                  onSelected: (acao) {
+                    if (acao == 'juntar') _juntar(context, produto);
+                    if (acao == 'separar') _separar(context, produto);
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'juntar',
+                      child: Text('Juntar com outro produto'),
+                    ),
+                    PopupMenuItem(
+                      value: 'separar',
+                      child: Text('Separar deste grupo'),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _renomear(BuildContext context) async {
+    final controle = TextEditingController(text: grupo.nome);
+    final nome = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Renomear produto base'),
+        content: TextField(controller: controle, autofocus: true),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controle.text),
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+    controle.dispose();
+    if (nome == null || nome.trim().isEmpty || !context.mounted) return;
+    await _executar(context, () => estado.renomearGrupo(grupo.id, nome));
+  }
+
+  Future<void> _juntar(BuildContext context, Produto produto) async {
+    var busca = '';
+    final escolhido = await showDialog<Produto>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          final termo = busca.toLowerCase().trim();
+          final candidatos = estado.produtos
+              .where((p) => p.id != produto.id &&
+                  (termo.isEmpty || p.nome.toLowerCase().contains(termo)))
+              .take(20)
+              .toList();
+          return AlertDialog(
+            title: const Text('Juntar com outro produto'),
+            content: SizedBox(
+              width: 420,
+              height: 420,
+              child: Column(
+                children: [
+                  TextField(
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      hintText: 'Buscar em todas as lojas',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onChanged: (valor) => setState(() => busca = valor),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView(
+                      children: [
+                        for (final candidato in candidatos)
+                          ListTile(
+                            title: Text(candidato.nome),
+                            subtitle: Text(
+                              estado.gruposDoProduto(candidato.id)
+                                  .map((g) => g.nome)
+                                  .join(', '),
+                            ),
+                            onTap: () => Navigator.pop(context, candidato),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+            ],
+          );
+        },
+      ),
+    );
+    if (escolhido == null || !context.mounted) return;
+    final destinos = estado.gruposDoProduto(escolhido.id);
+    if (destinos.isEmpty) return;
+    await _executar(context, () => estado.juntarManual(produto.id, destinos.first.id));
+  }
+
+  Future<void> _separar(BuildContext context, Produto produto) async {
+    await _executar(context, () => estado.separarDoGrupo(produto.id, grupo.id));
+  }
+
+  Future<void> _executar(
+    BuildContext context,
+    Future<void> Function() acao,
+  ) async {
+    try {
+      await acao();
+    } catch (erro) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$erro')));
+    }
   }
 }
 
@@ -296,10 +465,15 @@ class _Cartao extends StatelessWidget {
 }
 
 class _ItemHistorico extends StatelessWidget {
-  const _ItemHistorico({required this.preco, required this.loja});
+  const _ItemHistorico({
+    required this.preco,
+    required this.loja,
+    this.produto,
+  });
 
   final Preco preco;
   final String loja;
+  final String? produto;
 
   @override
   Widget build(BuildContext context) {
@@ -331,6 +505,12 @@ class _ItemHistorico extends StatelessWidget {
                         style: textos.bodySmall
                             ?.copyWith(color: cores.onSurfaceVariant),
                       ),
+                      if ((produto ?? '').isNotEmpty)
+                        Text(
+                          produto!,
+                          style: textos.labelSmall
+                              ?.copyWith(color: cores.onSurfaceVariant),
+                        ),
                     ],
                   ),
                 ),

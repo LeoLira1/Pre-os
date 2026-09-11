@@ -297,6 +297,8 @@ class _RevisaoPaginaState extends State<RevisaoPagina> {
               onEditar: _editar,
               onAdicionar: () => _adicionarManual(foto),
               nomeProduto: (id) => widget.estado.produtoPorId(id)?.nome,
+              pareceMesmo: (id) =>
+                  widget.estado.melhorSugestaoParaProduto(id)?.grupo.nome,
             ),
             const SizedBox(height: 16),
           ],
@@ -408,6 +410,7 @@ class _GrupoFoto extends StatelessWidget {
     required this.onEditar,
     required this.onAdicionar,
     required this.nomeProduto,
+    required this.pareceMesmo,
   });
 
   final FotoDoLote foto;
@@ -417,6 +420,7 @@ class _GrupoFoto extends StatelessWidget {
   final void Function(ItemRevisao) onEditar;
   final VoidCallback onAdicionar;
   final String? Function(int) nomeProduto;
+  final String? Function(int) pareceMesmo;
 
   @override
   Widget build(BuildContext context) {
@@ -474,6 +478,7 @@ class _GrupoFoto extends StatelessWidget {
               media: mediaDe(revisao),
               jaRegistrado: jaRegistradoDe(revisao),
               nomeProduto: nomeProduto,
+              pareceMesmo: pareceMesmo,
               onTap: () => onEditar(revisao),
             ),
           Padding(
@@ -496,6 +501,7 @@ class _CartaoItem extends StatelessWidget {
     required this.media,
     required this.jaRegistrado,
     required this.nomeProduto,
+    required this.pareceMesmo,
     required this.onTap,
   });
 
@@ -503,6 +509,7 @@ class _CartaoItem extends StatelessWidget {
   final double? media;
   final Preco? jaRegistrado;
   final String? Function(int) nomeProduto;
+  final String? Function(int) pareceMesmo;
   final VoidCallback onTap;
 
   @override
@@ -610,6 +617,14 @@ class _CartaoItem extends StatelessWidget {
                 style: textos.bodySmall
                     ?.copyWith(color: cores.onSurfaceVariant),
               ),
+              if (pareceMesmo(revisao.produtoId!) case final String grupo)
+                Text(
+                  'Parece ser o mesmo que: $grupo',
+                  style: textos.bodySmall?.copyWith(
+                    color: ambar,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
             ],
           ],
         ),

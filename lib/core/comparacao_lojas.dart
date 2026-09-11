@@ -10,6 +10,8 @@ class PrecoNaLoja {
     required this.data,
     this.precoRef,
     this.unidadeRef,
+    this.produtoId,
+    this.nomeProduto,
   });
 
   final int lojaId;
@@ -20,6 +22,8 @@ class PrecoNaLoja {
   final String data;
   final double? precoRef;
   final String? unidadeRef;
+  final int? produtoId;
+  final String? nomeProduto;
 
   /// Valor usado para comparar as lojas: o preco de referencia quando
   /// existe, senao o preco cheio.
@@ -34,12 +38,16 @@ class PrecoNaLoja {
 List<PrecoNaLoja> compararLojas({
   required List<Preco> precos,
   required String Function(int lojaId) nomeDaLoja,
+  String Function(int produtoId)? nomeDoProduto,
 }) {
   // Guarda so o registro mais recente de cada loja.
   final maisRecentePorLoja = <int, Preco>{};
   for (final preco in precos) {
     final atual = maisRecentePorLoja[preco.lojaId];
-    if (atual == null || preco.data.compareTo(atual.data) > 0) {
+    if (atual == null ||
+        preco.data.compareTo(atual.data) > 0 ||
+        (preco.data == atual.data &&
+            preco.valorComparavel < atual.valorComparavel)) {
       maisRecentePorLoja[preco.lojaId] = preco;
     }
   }
@@ -53,6 +61,8 @@ List<PrecoNaLoja> compararLojas({
         data: preco.data,
         precoRef: preco.precoRef,
         unidadeRef: preco.unidadeRef,
+        produtoId: preco.produtoId,
+        nomeProduto: nomeDoProduto?.call(preco.produtoId),
       ),
   ];
 

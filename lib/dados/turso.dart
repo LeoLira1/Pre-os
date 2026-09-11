@@ -28,6 +28,9 @@ class Fotografia {
     required this.lojas,
     required this.produtos,
     required this.precos,
+    this.grupos = const <Grupo>[],
+    this.produtoGrupos = const <ProdutoGrupo>[],
+    this.sugestoesRejeitadas = const <SugestaoRejeitada>[],
     this.apelidos = const <Apelido>[],
     this.custoAcumuladoUsd = 0,
   });
@@ -35,6 +38,9 @@ class Fotografia {
   final List<Loja> lojas;
   final List<Produto> produtos;
   final List<Preco> precos;
+  final List<Grupo> grupos;
+  final List<ProdutoGrupo> produtoGrupos;
+  final List<SugestaoRejeitada> sugestoesRejeitadas;
 
   /// Textos de tabloide ja vinculados a um produto.
   final List<Apelido> apelidos;
@@ -103,7 +109,37 @@ class Turso {
         await cliente.execute(nova.comando);
       }
     }
+    await _migrarProdutosSemGrupo(cliente);
     _esquemaConferido = true;
+  }
+
+  /// Migra somente produtos ainda sem vinculo. Cada produto recebe um grupo
+  /// proprio; nenhum produto, preco ou tabela existente e alterado.
+  Future<void> _migrarProdutosSemGrupo(LibsqlClient cliente) async {
+    final semGrupo = await cliente.query(
+      'SELECT p.id, p.nome, p.categoria, '
+      '(SELECT pr.unidade_ref FROM precos pr WHERE pr.produto_id = p.id '
+      'AND pr.unidade_ref IS NOT NULL ORDER BY pr.data DESC, pr.id DESC LIMIT 1) '
+      'AS unidade_ref FROM produtos p '
+      'WHERE NOT EXISTS (SELECT 1 FROM produto_grupos pg WHERE pg.produto_id = p.id)',
+    );
+    final agora = DateTime.now().toIso8601String();
+    for (final produto in semGrupo) {
+      await cliente.execute(
+        'INSERT INTO grupos (nome, categoria, unidade_ref, criado_em) VALUES (?, ?, ?, ?)',
+        positional: [
+          comoTexto(produto['nome']) ?? '',
+          comoTexto(produto['categoria']),
+          comoTexto(produto['unidade_ref']),
+          agora,
+        ],
+      );
+      final criado = await cliente.query('SELECT id FROM grupos ORDER BY id DESC LIMIT 1');
+      await cliente.execute(
+        "INSERT OR IGNORE INTO produto_grupos (produto_id, grupo_id, origem) VALUES (?, ?, 'automatico')",
+        positional: [comoInt(produto['id']), comoInt(criado.first['id'])],
+      );
+    }
   }
 
   Future<bool> _colunaExiste(
@@ -128,6 +164,10 @@ class Turso {
     final apelidos = await cliente.query(
       'SELECT produto_id, loja_id, texto_original FROM produto_apelidos',
     );
+    final grupos = await cliente.query('SELECT * FROM grupos ORDER BY nome');
+    final produtoGrupos = await cliente.query('SELECT * FROM produto_grupos');
+    final sugestoesRejeitadas =
+        await cliente.query('SELECT * FROM sugestoes_rejeitadas');
     final custo = await cliente.query(
       'SELECT COALESCE(SUM(custo_estimado_usd), 0) AS total FROM importacoes',
     );
@@ -136,6 +176,10 @@ class Turso {
       lojas: lojas.map(Loja.doMapa).toList(),
       produtos: produtos.map(Produto.doMapa).toList(),
       precos: precos.map(Preco.doMapa).toList(),
+      grupos: grupos.map(Grupo.doMapa).toList(),
+      produtoGrupos: produtoGrupos.map(ProdutoGrupo.doMapa).toList(),
+      sugestoesRejeitadas:
+          sugestoesRejeitadas.map(SugestaoRejeitada.doMapa).toList(),
       apelidos: apelidos.map(Apelido.doMapa).toList(),
       custoAcumuladoUsd: comoDouble(custo.first['total']) ?? 0,
     );
@@ -293,6 +337,24 @@ class Turso {
           ],
         );
         if (afetadas > 0) precosInseridos++;
+
+        final temGrupo = await transacao.query(
+          'SELECT 1 FROM produto_grupos WHERE produto_id = ? LIMIT 1',
+          positional: [produtoId],
+        );
+        if (temGrupo.isEmpty) {
+          await transacao.execute(
+            'INSERT INTO grupos (nome, categoria, unidade_ref, criado_em) VALUES (?, ?, ?, ?)',
+            positional: [linha.produto, linha.categoria, linha.unidadeRef, agora],
+          );
+          final grupo = await transacao.query(
+            'SELECT id FROM grupos ORDER BY id DESC LIMIT 1',
+          );
+          await transacao.execute(
+            "INSERT INTO produto_grupos (produto_id, grupo_id, origem) VALUES (?, ?, 'automatico')",
+            positional: [produtoId, comoInt(grupo.first['id'])],
+          );
+        }
       }
 
       await transacao.commit();
@@ -308,6 +370,120 @@ class Turso {
       duplicadosIgnorados: linhas.length - precosInseridos,
     );
   }
+}
+
+extension GestaoDeGrupos on Turso {
+  Future<void> aceitarSugestao(int produtoId, int grupoId) async {
+    final cliente = await conexaoPronta();
+    final transacao = await cliente.transaction();
+    try {
+      final unidadeProduto = await transacao.query(
+        'SELECT unidade_ref FROM precos WHERE produto_id = ? AND unidade_ref IS NOT NULL '
+        'ORDER BY data DESC, id DESC LIMIT 1',
+        positional: [produtoId],
+      );
+      final grupo = await transacao.query(
+        'SELECT unidade_ref FROM grupos WHERE id = ?',
+        positional: [grupoId],
+      );
+      if (grupo.isEmpty || unidadeProduto.isEmpty ||
+          normalizar(comoTexto(grupo.first['unidade_ref'])) !=
+              normalizar(comoTexto(unidadeProduto.first['unidade_ref']))) {
+        throw const EstadoErrorGrupo('As unidades de referencia sao diferentes.');
+      }
+      await transacao.execute(
+        "INSERT OR IGNORE INTO produto_grupos (produto_id, grupo_id, origem) VALUES (?, ?, 'sugestao_aceita')",
+        positional: [produtoId, grupoId],
+      );
+      await transacao.execute(
+        "DELETE FROM produto_grupos WHERE produto_id = ? AND origem = 'automatico' AND grupo_id <> ?",
+        positional: [produtoId, grupoId],
+      );
+      await transacao.execute(
+        'DELETE FROM sugestoes_rejeitadas WHERE produto_id = ? AND grupo_id = ?',
+        positional: [produtoId, grupoId],
+      );
+      await transacao.commit();
+    } catch (_) {
+      await transacao.rollback();
+      rethrow;
+    }
+  }
+
+  Future<void> rejeitarSugestao(int produtoId, int grupoId) async {
+    final cliente = await conexaoPronta();
+    await cliente.execute(
+      'INSERT OR IGNORE INTO sugestoes_rejeitadas (produto_id, grupo_id, criado_em) VALUES (?, ?, ?)',
+      positional: [produtoId, grupoId, DateTime.now().toIso8601String()],
+    );
+  }
+
+  Future<void> juntarManual(int produtoId, int grupoId) async {
+    await aceitarSugestao(produtoId, grupoId);
+    final cliente = await conexaoPronta();
+    await cliente.execute(
+      "UPDATE produto_grupos SET origem = 'manual' WHERE produto_id = ? AND grupo_id = ?",
+      positional: [produtoId, grupoId],
+    );
+  }
+
+  Future<void> separarDoGrupo(int produtoId, int grupoId) async {
+    final cliente = await conexaoPronta();
+    final transacao = await cliente.transaction();
+    try {
+      await transacao.execute(
+        'DELETE FROM produto_grupos WHERE produto_id = ? AND grupo_id = ?',
+        positional: [produtoId, grupoId],
+      );
+      final restantes = await transacao.query(
+        'SELECT 1 FROM produto_grupos WHERE produto_id = ? LIMIT 1',
+        positional: [produtoId],
+      );
+      if (restantes.isEmpty) {
+        final produto = await transacao.query(
+          'SELECT nome, categoria FROM produtos WHERE id = ?',
+          positional: [produtoId],
+        );
+        final preco = await transacao.query(
+          'SELECT unidade_ref FROM precos WHERE produto_id = ? AND unidade_ref IS NOT NULL '
+          'ORDER BY data DESC, id DESC LIMIT 1',
+          positional: [produtoId],
+        );
+        await transacao.execute(
+          'INSERT INTO grupos (nome, categoria, unidade_ref, criado_em) VALUES (?, ?, ?, ?)',
+          positional: [
+            comoTexto(produto.first['nome']) ?? '',
+            comoTexto(produto.first['categoria']),
+            preco.isEmpty ? null : comoTexto(preco.first['unidade_ref']),
+            DateTime.now().toIso8601String(),
+          ],
+        );
+        final novo = await transacao.query('SELECT id FROM grupos ORDER BY id DESC LIMIT 1');
+        await transacao.execute(
+          "INSERT INTO produto_grupos (produto_id, grupo_id, origem) VALUES (?, ?, 'automatico')",
+          positional: [produtoId, comoInt(novo.first['id'])],
+        );
+      }
+      await transacao.commit();
+    } catch (_) {
+      await transacao.rollback();
+      rethrow;
+    }
+  }
+
+  Future<void> renomearGrupo(int grupoId, String nome) async {
+    final limpo = nome.trim();
+    if (limpo.isEmpty) throw const EstadoErrorGrupo('Informe o nome do grupo.');
+    final cliente = await conexaoPronta();
+    await cliente.execute('UPDATE grupos SET nome = ? WHERE id = ?', positional: [limpo, grupoId]);
+  }
+}
+
+class EstadoErrorGrupo implements Exception {
+  const EstadoErrorGrupo(this.mensagem);
+  final String mensagem;
+  @override
+  String toString() => mensagem;
 }
 
 /// O que o banco ja tem, para montar a previa antes de confirmar.
@@ -530,6 +706,24 @@ extension ImportacaoPorFoto on Turso {
           ],
         );
         if (afetadas > 0) precosInseridos++;
+
+        final temGrupo = await transacao.query(
+          'SELECT 1 FROM produto_grupos WHERE produto_id = ? LIMIT 1',
+          positional: [produtoId],
+        );
+        if (temGrupo.isEmpty) {
+          await transacao.execute(
+            'INSERT INTO grupos (nome, categoria, unidade_ref, criado_em) VALUES (?, ?, ?, ?)',
+            positional: [item.nome, item.categoria, item.unidadeRef, agora],
+          );
+          final grupo = await transacao.query(
+            'SELECT id FROM grupos ORDER BY id DESC LIMIT 1',
+          );
+          await transacao.execute(
+            "INSERT INTO produto_grupos (produto_id, grupo_id, origem) VALUES (?, ?, 'automatico')",
+            positional: [produtoId, comoInt(grupo.first['id'])],
+          );
+        }
 
         // Grava o texto do tabloide para que na proxima semana o vinculo
         // seja automatico.

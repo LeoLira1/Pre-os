@@ -178,7 +178,7 @@ class _ProdutosPaginaState extends State<ProdutosPagina> {
                           MaterialPageRoute<void>(
                             builder: (_) => ProdutoPagina(
                               estado: estado,
-                              produtoId: item.produto.id,
+                              grupoId: item.grupo.id,
                             ),
                           ),
                         ),
@@ -198,19 +198,15 @@ class _ProdutosPaginaState extends State<ProdutosPagina> {
 class _CartaoProduto extends StatelessWidget {
   const _CartaoProduto({required this.resumo, required this.onTap});
 
-  final ProdutoResumo resumo;
+  final GrupoResumo resumo;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final produto = resumo.produto;
+    final grupo = resumo.grupo;
     final textos = Theme.of(context).textTheme;
     final cores = Theme.of(context).colorScheme;
-    final detalhe = descreverProduto(
-      marca: produto.marca,
-      embalagemQtd: produto.embalagemQtd,
-      embalagemUnidade: produto.embalagemUnidade,
-    );
+    final detalhe = '${resumo.produtos.length} produto${resumo.produtos.length == 1 ? '' : 's'} vinculado${resumo.produtos.length == 1 ? '' : 's'}';
     final barata = resumo.maisBarata;
 
     return Card(
@@ -230,7 +226,7 @@ class _CartaoProduto extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          produto.nome,
+                          grupo.nome,
                           style: textos.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
@@ -285,10 +281,21 @@ class _CartaoProduto extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Expanded(
-                      child: Text(
-                        barata.nomeLoja,
-                        style: textos.bodySmall
-                            ?.copyWith(color: cores.onSurfaceVariant),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            barata.nomeLoja,
+                            style: textos.bodySmall
+                                ?.copyWith(color: cores.onSurfaceVariant),
+                          ),
+                          if ((barata.nomeProduto ?? '').isNotEmpty)
+                            Text(
+                              barata.nomeProduto!,
+                              style: textos.labelSmall
+                                  ?.copyWith(color: cores.onSurfaceVariant),
+                            ),
+                        ],
                       ),
                     ),
                     Text(
@@ -416,6 +423,14 @@ class _ListaDeLojas extends StatelessWidget {
                         if (loja.precoRef != null)
                           Text(
                             formatarPrecoRef(loja.precoRef, loja.unidadeRef),
+                            style: textos.labelSmall
+                                ?.copyWith(color: cores.onSurfaceVariant),
+                          ),
+                        if ((loja.nomeProduto ?? '').isNotEmpty)
+                          Text(
+                            loja.nomeProduto!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: textos.labelSmall
                                 ?.copyWith(color: cores.onSurfaceVariant),
                           ),

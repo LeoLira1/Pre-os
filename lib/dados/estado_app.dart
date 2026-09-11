@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../core/comparacao_lojas.dart';
 import '../core/custo.dart';
 import '../core/formato.dart';
+import '../core/grupos.dart';
 import '../core/texto.dart';
 import '../core/vinculo.dart';
 import '../modelos/modelos.dart';
@@ -31,6 +32,25 @@ class ProdutoResumo {
   /// A loja onde esta mais barato, quando ha precos.
   PrecoNaLoja? get maisBarata => porLoja.isEmpty ? null : porLoja.first;
 
+  bool get temVariasLojas => porLoja.length > 1;
+}
+
+class GrupoResumo {
+  const GrupoResumo({
+    required this.grupo,
+    required this.produtos,
+    required this.estatisticas,
+    required this.porLoja,
+    this.ultimoRegistro,
+  });
+
+  final Grupo grupo;
+  final List<Produto> produtos;
+  final EstatisticasProduto estatisticas;
+  final List<PrecoNaLoja> porLoja;
+  final Preco? ultimoRegistro;
+
+  PrecoNaLoja? get maisBarata => porLoja.isEmpty ? null : porLoja.first;
   bool get temVariasLojas => porLoja.length > 1;
 }
 
@@ -71,6 +91,8 @@ class EstadoApp extends ChangeNotifier {
   bool get temChaveDeepseek => chaveDeepseek.trim().isNotEmpty;
 
   List<Produto> get produtos => _conteudo.produtos;
+  List<Grupo> get grupos => _conteudo.grupos;
+  List<ProdutoGrupo> get produtoGrupos => _conteudo.produtoGrupos;
   List<Apelido> get apelidos => _conteudo.apelidos;
   List<Loja> get lojas => _conteudo.lojas;
   double get custoAcumuladoUsd => _conteudo.custoAcumuladoUsd;
@@ -215,7 +237,7 @@ class EstadoApp extends ChangeNotifier {
 
   /// Categorias presentes nos produtos, em ordem alfabetica.
   List<String> get categorias {
-    final nomes = _conteudo.produtos
+    final nomes = _conteudo.grupos
         .map((p) => (p.categoria ?? '').trim())
         .where((c) => c.isNotEmpty)
         .toSet()
@@ -225,38 +247,38 @@ class EstadoApp extends ChangeNotifier {
   }
 
   /// Lista da tela inicial, ja filtrada pela busca e pela categoria.
-  List<ProdutoResumo> produtosFiltrados({
+  List<GrupoResumo> produtosFiltrados({
     String busca = '',
     String? categoria,
     int? lojaId,
   }) {
     final termo = normalizar(busca);
-    final precosPorProduto = <int, List<Preco>>{};
-    for (final preco in _conteudo.precos) {
-      precosPorProduto.putIfAbsent(preco.produtoId, () => <Preco>[]).add(preco);
-    }
-
-    final resultado = <ProdutoResumo>[];
-    for (final produto in _conteudo.produtos) {
-      if (categoria != null && (produto.categoria ?? '') != categoria) continue;
+    final resultado = <GrupoResumo>[];
+    for (final grupo in _conteudo.grupos) {
+      final membros = produtosDoGrupo(grupo.id);
+      if (membros.isEmpty) continue;
+      if (categoria != null && (grupo.categoria ?? '') != categoria) continue;
       if (termo.isNotEmpty &&
-          !contemBusca(produto.nome, termo) &&
-          !contemBusca(produto.marca, termo)) {
+          !contemBusca(grupo.nome, termo) &&
+          !membros.any((p) =>
+              contemBusca(p.nome, termo) || contemBusca(p.marca, termo))) {
         continue;
       }
-      final precos = precosPorProduto[produto.id] ?? const <Preco>[];
+      final precos = precosDoGrupo(grupo.id);
       // Filtro por loja: so entra quem tem preco naquela loja.
       if (lojaId != null && !precos.any((p) => p.lojaId == lojaId)) continue;
 
       final ordenados = [...precos]..sort((a, b) => a.data.compareTo(b.data));
       resultado.add(
-        ProdutoResumo(
-          produto: produto,
+        GrupoResumo(
+          grupo: grupo,
+          produtos: membros,
           estatisticas: EstatisticasProduto.calcular(ordenados),
           ultimoRegistro: ordenados.isEmpty ? null : ordenados.last,
           porLoja: compararLojas(
             precos: ordenados,
             nomeDaLoja: nomeDaLoja,
+            nomeDoProduto: (id) => produtoPorId(id)?.nome ?? 'Produto $id',
           ),
         ),
       );
@@ -267,7 +289,7 @@ class EstadoApp extends ChangeNotifier {
       final dataB = b.estatisticas.dataUltimo ?? '';
       final porData = dataB.compareTo(dataA);
       if (porData != 0) return porData;
-      return normalizar(a.produto.nome).compareTo(normalizar(b.produto.nome));
+      return normalizar(a.grupo.nome).compareTo(normalizar(b.grupo.nome));
     });
     return resultado;
   }
@@ -277,6 +299,111 @@ class EstadoApp extends ChangeNotifier {
       if (p.id == id) return p;
     }
     return null;
+  }
+
+  Grupo? grupoPorId(int id) {
+    for (final grupo in _conteudo.grupos) {
+      if (grupo.id == id) return grupo;
+    }
+    return null;
+  }
+
+  List<Grupo> gruposDoProduto(int produtoId) {
+    final ids = _conteudo.produtoGrupos
+        .where((v) => v.produtoId == produtoId)
+        .map((v) => v.grupoId)
+        .toSet();
+    return _conteudo.grupos.where((g) => ids.contains(g.id)).toList();
+  }
+
+  List<Produto> produtosDoGrupo(int grupoId) {
+    final ids = _conteudo.produtoGrupos
+        .where((v) => v.grupoId == grupoId)
+        .map((v) => v.produtoId)
+        .toSet();
+    return _conteudo.produtos.where((p) => ids.contains(p.id)).toList();
+  }
+
+  List<Preco> precosDoGrupo(int grupoId) {
+    final ids = produtosDoGrupo(grupoId).map((p) => p.id).toSet();
+    final lista = _conteudo.precos.where((p) => ids.contains(p.produtoId)).toList();
+    lista.sort((a, b) => a.data.compareTo(b.data));
+    return lista;
+  }
+
+  String? unidadeDoProduto(int produtoId) {
+    final precos = precosDoProduto(produtoId).where((p) =>
+        (p.unidadeRef ?? '').trim().isNotEmpty).toList();
+    return precos.isEmpty ? null : precos.last.unidadeRef;
+  }
+
+  List<SugestaoGrupo> get sugestoesPendentes => gerarSugestoesGrupos(
+        produtos: _conteudo.produtos,
+        grupos: _conteudo.grupos,
+        vinculos: _conteudo.produtoGrupos,
+        rejeitadas: _conteudo.sugestoesRejeitadas,
+        unidadeDoProduto: unidadeDoProduto,
+      );
+
+  SugestaoGrupo? melhorSugestaoParaProduto(int produtoId) {
+    final vinculos = _conteudo.produtoGrupos
+        .where((v) => v.produtoId == produtoId)
+        .toList();
+    if (vinculos.any((v) => v.origem != 'automatico')) return null;
+    for (final sugestao in sugestoesPendentes) {
+      if (sugestao.produto.id == produtoId) return sugestao;
+    }
+    return null;
+  }
+
+  Future<void> aceitarSugestao(SugestaoGrupo sugestao) async {
+    final conexao = abrirConexao();
+    try {
+      await conexao.aceitarSugestao(sugestao.produto.id, sugestao.grupo.id);
+    } finally {
+      await conexao.fechar();
+    }
+    await sincronizar();
+  }
+
+  Future<void> rejeitarSugestao(SugestaoGrupo sugestao) async {
+    final conexao = abrirConexao();
+    try {
+      await conexao.rejeitarSugestao(sugestao.produto.id, sugestao.grupo.id);
+    } finally {
+      await conexao.fechar();
+    }
+    await sincronizar();
+  }
+
+  Future<void> juntarManual(int produtoId, int grupoId) async {
+    final conexao = abrirConexao();
+    try {
+      await conexao.juntarManual(produtoId, grupoId);
+    } finally {
+      await conexao.fechar();
+    }
+    await sincronizar();
+  }
+
+  Future<void> separarDoGrupo(int produtoId, int grupoId) async {
+    final conexao = abrirConexao();
+    try {
+      await conexao.separarDoGrupo(produtoId, grupoId);
+    } finally {
+      await conexao.fechar();
+    }
+    await sincronizar();
+  }
+
+  Future<void> renomearGrupo(int grupoId, String nome) async {
+    final conexao = abrirConexao();
+    try {
+      await conexao.renomearGrupo(grupoId, nome);
+    } finally {
+      await conexao.fechar();
+    }
+    await sincronizar();
   }
 
   String nomeDaLoja(int lojaId) => lojasPorId[lojaId]?.nome ?? 'Loja $lojaId';

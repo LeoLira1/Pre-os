@@ -59,10 +59,35 @@ CREATE TABLE IF NOT EXISTS importacoes (
   tokens_cache INTEGER,
   custo_estimado_usd REAL
 )''',
+  '''
+CREATE TABLE IF NOT EXISTS grupos (
+  id INTEGER PRIMARY KEY,
+  nome TEXT NOT NULL,
+  categoria TEXT,
+  unidade_ref TEXT,
+  criado_em TEXT
+)''',
+  '''
+CREATE TABLE IF NOT EXISTS produto_grupos (
+  produto_id INTEGER NOT NULL REFERENCES produtos(id),
+  grupo_id INTEGER NOT NULL REFERENCES grupos(id),
+  origem TEXT NOT NULL,
+  UNIQUE(produto_id, grupo_id)
+)''',
+  '''
+CREATE TABLE IF NOT EXISTS sugestoes_rejeitadas (
+  produto_id INTEGER NOT NULL,
+  grupo_id INTEGER NOT NULL,
+  criado_em TEXT,
+  UNIQUE(produto_id, grupo_id)
+)''',
   'CREATE INDEX IF NOT EXISTS idx_precos_produto ON precos(produto_id)',
   'CREATE INDEX IF NOT EXISTS idx_precos_data ON precos(data)',
   'CREATE INDEX IF NOT EXISTS idx_apelidos_produto ON produto_apelidos(produto_id)',
   'CREATE INDEX IF NOT EXISTS idx_apelidos_texto ON produto_apelidos(texto_original)',
+  'CREATE INDEX IF NOT EXISTS idx_produto_grupos_produto ON produto_grupos(produto_id)',
+  'CREATE INDEX IF NOT EXISTS idx_produto_grupos_grupo ON produto_grupos(grupo_id)',
+  'CREATE INDEX IF NOT EXISTS idx_sugestoes_rejeitadas ON sugestoes_rejeitadas(produto_id, grupo_id)',
 ];
 
 /// Colunas acrescentadas depois da Fase 1.

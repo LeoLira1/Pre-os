@@ -13,6 +13,9 @@ class CacheConteudo {
     required this.lojas,
     required this.produtos,
     required this.precos,
+    this.grupos = const <Grupo>[],
+    this.produtoGrupos = const <ProdutoGrupo>[],
+    this.sugestoesRejeitadas = const <SugestaoRejeitada>[],
     this.apelidos = const <Apelido>[],
     this.custoAcumuladoUsd = 0,
     this.atualizadoEm,
@@ -21,6 +24,9 @@ class CacheConteudo {
   final List<Loja> lojas;
   final List<Produto> produtos;
   final List<Preco> precos;
+  final List<Grupo> grupos;
+  final List<ProdutoGrupo> produtoGrupos;
+  final List<SugestaoRejeitada> sugestoesRejeitadas;
 
   /// Textos de tabloide ja vinculados, usados para reconhecer o produto.
   final List<Apelido> apelidos;
@@ -65,6 +71,18 @@ class CacheLocal {
         precos: (mapa['precos'] as List<dynamic>? ?? [])
             .map((e) => Preco.doMapa(Map<String, dynamic>.from(e as Map)))
             .toList(),
+        grupos: (mapa['grupos'] as List<dynamic>? ?? [])
+            .map((e) => Grupo.doMapa(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+        produtoGrupos: (mapa['produto_grupos'] as List<dynamic>? ?? [])
+            .map((e) => ProdutoGrupo.doMapa(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+        sugestoesRejeitadas:
+            (mapa['sugestoes_rejeitadas'] as List<dynamic>? ?? [])
+                .map((e) => SugestaoRejeitada.doMapa(
+                      Map<String, dynamic>.from(e as Map),
+                    ))
+                .toList(),
         apelidos: (mapa['apelidos'] as List<dynamic>? ?? [])
             .map((e) => Apelido.doMapa(Map<String, dynamic>.from(e as Map)))
             .toList(),
@@ -87,6 +105,11 @@ class CacheLocal {
         'lojas': fotografia.lojas.map((e) => e.paraMapa()).toList(),
         'produtos': fotografia.produtos.map((e) => e.paraMapa()).toList(),
         'precos': fotografia.precos.map((e) => e.paraMapa()).toList(),
+        'grupos': fotografia.grupos.map((e) => e.paraMapa()).toList(),
+        'produto_grupos':
+            fotografia.produtoGrupos.map((e) => e.paraMapa()).toList(),
+        'sugestoes_rejeitadas':
+            fotografia.sugestoesRejeitadas.map((e) => e.paraMapa()).toList(),
         'apelidos': fotografia.apelidos.map((e) => e.paraMapa()).toList(),
         'custo_acumulado_usd': fotografia.custoAcumuladoUsd,
       }),
@@ -95,6 +118,9 @@ class CacheLocal {
       lojas: fotografia.lojas,
       produtos: fotografia.produtos,
       precos: fotografia.precos,
+      grupos: fotografia.grupos,
+      produtoGrupos: fotografia.produtoGrupos,
+      sugestoesRejeitadas: fotografia.sugestoesRejeitadas,
       apelidos: fotografia.apelidos,
       custoAcumuladoUsd: fotografia.custoAcumuladoUsd,
       atualizadoEm: agora,
