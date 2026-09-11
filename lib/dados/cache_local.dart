@@ -1,0 +1,90 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
+
+import '../modelos/modelos.dart';
+import 'turso.dart';
+
+/// Conteudo do cache guardado em arquivo no aparelho.
+class CacheConteudo {
+  const CacheConteudo({
+    required this.lojas,
+    required this.produtos,
+    required this.precos,
+    this.atualizadoEm,
+  });
+
+  final List<Loja> lojas;
+  final List<Produto> produtos;
+  final List<Preco> precos;
+  final DateTime? atualizadoEm;
+
+  static const CacheConteudo vazio = CacheConteudo(
+    lojas: <Loja>[],
+    produtos: <Produto>[],
+    precos: <Preco>[],
+  );
+
+  bool get estaVazio => produtos.isEmpty && precos.isEmpty;
+}
+
+/// Guarda uma copia do banco num arquivo JSON dentro da pasta do aplicativo,
+/// para que o app abra e consulte mesmo sem internet.
+class CacheLocal {
+  static const _nomeArquivo = 'cache_precos.json';
+
+  Future<File> _arquivo() async {
+    final pasta = await getApplicationDocumentsDirectory();
+    return File('${pasta.path}/$_nomeArquivo');
+  }
+
+  Future<CacheConteudo> ler() async {
+    try {
+      final arquivo = await _arquivo();
+      if (!await arquivo.exists()) return CacheConteudo.vazio;
+      final texto = await arquivo.readAsString();
+      if (texto.trim().isEmpty) return CacheConteudo.vazio;
+      final mapa = jsonDecode(texto) as Map<String, dynamic>;
+      return CacheConteudo(
+        lojas: (mapa['lojas'] as List<dynamic>? ?? [])
+            .map((e) => Loja.doMapa(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+        produtos: (mapa['produtos'] as List<dynamic>? ?? [])
+            .map((e) => Produto.doMapa(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+        precos: (mapa['precos'] as List<dynamic>? ?? [])
+            .map((e) => Preco.doMapa(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+        atualizadoEm: DateTime.tryParse(mapa['atualizado_em']?.toString() ?? ''),
+      );
+    } catch (_) {
+      // Cache corrompido nao pode impedir o app de abrir.
+      return CacheConteudo.vazio;
+    }
+  }
+
+  Future<CacheConteudo> gravar(Fotografia fotografia) async {
+    final agora = DateTime.now();
+    final arquivo = await _arquivo();
+    await arquivo.writeAsString(
+      jsonEncode({
+        'atualizado_em': agora.toIso8601String(),
+        'lojas': fotografia.lojas.map((e) => e.paraMapa()).toList(),
+        'produtos': fotografia.produtos.map((e) => e.paraMapa()).toList(),
+        'precos': fotografia.precos.map((e) => e.paraMapa()).toList(),
+      }),
+    );
+    return CacheConteudo(
+      lojas: fotografia.lojas,
+      produtos: fotografia.produtos,
+      precos: fotografia.precos,
+      atualizadoEm: agora,
+    );
+  }
+
+  Future<void> limpar() async {
+    final arquivo = await _arquivo();
+    if (await arquivo.exists()) await arquivo.delete();
+  }
+}

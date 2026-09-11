@@ -1,0 +1,56 @@
+name: Build APK
+
+# Compila o APK de release a cada push e deixa o arquivo para download
+# na aba Actions, em "Artifacts".
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: APK de release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v4
+
+      - name: Instalar o Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Instalar o Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.3'
+          channel: stable
+          cache: true
+
+      - name: Instalar o Rust
+        # O pacote libsql_dart compila uma parte em Rust para o Android.
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Baixar as dependencias
+        run: flutter pub get
+
+      - name: Conferir o codigo
+        run: flutter analyze
+
+      - name: Rodar os testes
+        run: flutter test
+
+      - name: Compilar o APK de release
+        run: flutter build apk --release
+
+      - name: Guardar o APK para download
+        uses: actions/upload-artifact@v4
+        with:
+          name: precos-supermercado-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30

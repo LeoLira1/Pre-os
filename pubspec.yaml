@@ -1,0 +1,37 @@
+name: precos_supermercado
+description: "Acompanhe precos de supermercado e identifique promocoes reais."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Conexao direta com o banco Turso / libSQL (sem backend proprio).
+  libsql_dart: ^0.9.0
+  # Leitura de arquivos CSV do aparelho.
+  file_picker: ^12.3.0
+  # Parser de CSV que respeita aspas, virgulas dentro do campo e quebras de linha.
+  csv: ^8.0.0
+  # Formatacao de moeda e datas no padrao brasileiro.
+  intl: ^0.20.3
+  # Grafico de historico de precos.
+  fl_chart: ^1.2.0
+  # Guarda URL, token e chave da API somente no aparelho.
+  shared_preferences: ^2.5.5
+  # Pasta do aplicativo para o arquivo de cache local.
+  path_provider: ^2.1.6
+  # Busca ignorando acentos.
+  diacritic: ^0.1.6
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,13 @@
+data_oferta,loja,categoria,produto,marca,embalagem_qtd,embalagem_unidade,unidade_venda,preco,preco_ref,unidade_ref,ean,observacao
+2026-09-01,Assai,Mercearia,Arroz branco tipo 1,Tio Joao,5,kg,pacote,24.90,4.98,kg,7896006711001,Oferta do encarte
+2026-09-01,Assai,Mercearia,Feijao carioca,Camil,1,kg,pacote,7.99,7.99,kg,7896006712001,Limite 3 un por cliente
+2026-09-01,Assai,Bebidas,Cerveja pilsen lata,Heineken,350,ml,lata,3.49,9.97,L,7896045506001,Limite 12 un
+2026-09-01,"Supermercado Silva, Filhos e Cia",Limpeza,Detergente neutro,Ype,500,ml,frasco,2.19,4.38,L,,"Leve 3, pague 2"
+2026-09-01,Atacadao,Hortifruti,Banana prata,,,,kg,5.99,5.99,kg,,
+2026-09-02,Atacadao,Mercearia,Acucar refinado,Uniao,1,kg,pacote,4.29,4.29,kg,7891910000197,
+2026-09-02,Atacadao,Mercearia,Cafe torrado e moido,Pilao,500,g,pacote,15.90,31.80,kg,7896089012345,Limite 2 un
+2026-09-08,Assai,Mercearia,Arroz branco tipo 1,Tio Joao,5,kg,pacote,22.90,4.58,kg,7896006711001,
+2026-09-08,Assai,Mercearia,Feijao carioca,Camil,1,kg,pacote,8.49,8.49,kg,7896006712001,
+2026-09-08,Atacadao,Mercearia,Cafe torrado e moido,Pilao,500,g,pacote,14.50,29.00,kg,7896089012345,
+2026-09-15,Assai,Mercearia,Arroz branco tipo 1,Tio Joao,5,kg,pacote,26.90,5.38,kg,7896006711001,Preco de prateleira
+2026-09-15,Atacadao,Hortifruti,Banana prata,,,,kg,4.49,4.49,kg,,
