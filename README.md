@@ -24,7 +24,7 @@ DeepSeek.
 | Tela | O que faz |
 | --- | --- |
 | **Produtos** (inicial) | Busca por nome ou marca (ignora acentos e maiusculas), filtro por categoria e por loja, e **onde cada produto esta mais barato** sem precisar abrir. |
-| **Produto** | Ultimo preco, menor, maior, media e numero de registros; grafico com uma linha por loja; historico completo com data, loja, preco, tipo e observacao. |
+| **Produto** | "Mais barato hoje" com a loja, menor, maior, media e numero de registros; grafico de linha por loja (ou de barras comparando lojas, quando nao ha evolucao no tempo); historico completo com data, loja, preco, tipo e observacao. |
 | **Importar > Fotos** | Escolhe fotos do encarte (galeria ou camera), manda ler pela DeepSeek e mostra o andamento foto a foto. |
 | **Revisao** | Tudo o que foi lido, agrupado por foto, com selos de "Novo produto", "Conferir" e "Ja registrado". Da para editar, excluir e trocar o produto vinculado antes de gravar. |
 | **Importar > CSV** | Escolhe um arquivo `.csv`, mostra uma previa (novos, existentes, duplicados, linhas com erro) e so grava depois do "Confirmar importacao". |

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/comparacao_lojas.dart';
 import '../core/formato.dart';
 import '../dados/estado_app.dart';
 import '../modelos/modelos.dart';
@@ -26,7 +27,7 @@ class ProdutoPagina extends StatelessWidget {
           return Scaffold(
             appBar: AppBar(title: const Text('Produto')),
             body: const Center(
-              child: Text('Este produto nao esta mais no cache local.'),
+              child: Text('Este produto não está mais no cache local.'),
             ),
           );
         }
@@ -42,20 +43,28 @@ class ProdutoPagina extends StatelessWidget {
             children: [
               _Cabecalho(produto: produto),
               const SizedBox(height: 16),
-              _Numeros(estatisticas: estatisticas),
+              _Numeros(
+                estatisticas: estatisticas,
+                porLoja: compararLojas(
+                  precos: precos,
+                  nomeDaLoja: estado.nomeDaLoja,
+                ),
+                nomeCurtoDaLoja: (id) =>
+                    nomeCurtoLoja(estado.nomeDaLoja(id)),
+              ),
               const SizedBox(height: 24),
               Text(
-                'Historico de preco',
+                'Histórico de preço',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               if (estatisticas.usandoPrecoRef)
                 Text(
-                  'Valores por ${estatisticas.unidadeRef ?? 'unidade de referencia'}.',
+                  'Valores por ${estatisticas.unidadeRef ?? 'unidade de referência'}.',
                   style: Theme.of(context).textTheme.bodySmall,
                 )
               else
                 Text(
-                  'Sem preco de referencia: mostrando o preco cheio.',
+                  'Sem preço de referência: mostrando o preço cheio.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               const SizedBox(height: 12),
@@ -74,7 +83,7 @@ class ProdutoPagina extends StatelessWidget {
                 const Card(
                   child: Padding(
                     padding: EdgeInsets.all(16),
-                    child: Text('Nenhum registro de preco para este produto.'),
+                    child: Text('Nenhum registro de preço para este produto.'),
                   ),
                 )
               else
@@ -106,7 +115,7 @@ class _Cabecalho extends StatelessWidget {
           (produto.embalagemUnidade ?? '').trim().isNotEmpty)
         'Embalagem: ${formatarEmbalagem(produto.embalagemQtd, produto.embalagemUnidade)}',
       if ((produto.unidadeVenda ?? '').trim().isNotEmpty)
-        'Venda por: ${produto.unidadeVenda}',
+        'Vendido por: ${produto.unidadeVenda}',
       if ((produto.ean ?? '').trim().isNotEmpty) 'EAN: ${produto.ean}',
     ];
 
@@ -145,32 +154,56 @@ class _Cabecalho extends StatelessWidget {
 }
 
 class _Numeros extends StatelessWidget {
-  const _Numeros({required this.estatisticas});
+  const _Numeros({
+    required this.estatisticas,
+    required this.porLoja,
+    required this.nomeCurtoDaLoja,
+  });
 
   final EstatisticasProduto estatisticas;
+
+  /// Ultimo preco em cada loja, da mais barata para a mais cara.
+  final List<PrecoNaLoja> porLoja;
+  final String Function(int lojaId) nomeCurtoDaLoja;
 
   @override
   Widget build(BuildContext context) {
     final unidade = estatisticas.unidadeRef;
     final cores = Theme.of(context).colorScheme;
+    final verde = Theme.of(context).brightness == Brightness.dark
+        ? Colors.green.shade300
+        : Colors.green.shade700;
+    final barata = porLoja.isEmpty ? null : porLoja.first;
+
     final cartoes = <Widget>[
+      // Onde comprar agora, que e o que interessa na hora da compra.
       _Cartao(
-        titulo: 'Ultimo',
-        valor: formatarPrecoRef(estatisticas.ultimo, unidade),
-        cor: cores.primary,
+        titulo: 'Mais barato hoje',
+        valor: barata == null
+            ? '--'
+            : formatarPrecoRef(barata.precoRef ?? barata.preco,
+                barata.precoRef == null ? null : barata.unidadeRef),
+        rodape: barata?.nomeLoja,
+        cor: verde,
       ),
       _Cartao(
         titulo: 'Menor',
         valor: formatarPrecoRef(estatisticas.menor, unidade),
+        rodape: estatisticas.lojaIdMenor == null
+            ? null
+            : nomeCurtoDaLoja(estatisticas.lojaIdMenor!),
         cor: cores.tertiary,
       ),
       _Cartao(
         titulo: 'Maior',
         valor: formatarPrecoRef(estatisticas.maior, unidade),
+        rodape: estatisticas.lojaIdMaior == null
+            ? null
+            : nomeCurtoDaLoja(estatisticas.lojaIdMaior!),
         cor: cores.error,
       ),
       _Cartao(
-        titulo: 'Media',
+        titulo: 'Média',
         valor: formatarPrecoRef(estatisticas.media, unidade),
         cor: cores.secondary,
       ),
@@ -202,11 +235,19 @@ class _Numeros extends StatelessWidget {
 }
 
 class _Cartao extends StatelessWidget {
-  const _Cartao({required this.titulo, required this.valor, required this.cor});
+  const _Cartao({
+    required this.titulo,
+    required this.valor,
+    required this.cor,
+    this.rodape,
+  });
 
   final String titulo;
   final String valor;
   final Color cor;
+
+  /// Linha pequena embaixo do valor, usada para o nome da loja.
+  final String? rodape;
 
   @override
   Widget build(BuildContext context) {
@@ -236,6 +277,17 @@ class _Cartao extends StatelessWidget {
                     ),
               ),
             ),
+            if (rodape != null && rodape!.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                rodape!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
           ],
         ),
       ),

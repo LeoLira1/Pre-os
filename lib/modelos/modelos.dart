@@ -168,6 +168,8 @@ class EstatisticasProduto {
     this.media,
     this.unidadeRef,
     this.dataUltimo,
+    this.lojaIdMenor,
+    this.lojaIdMaior,
     this.usandoPrecoRef = false,
   });
 
@@ -178,6 +180,10 @@ class EstatisticasProduto {
   final double? media;
   final String? unidadeRef;
   final String? dataUltimo;
+
+  /// Em que loja saiu o menor e o maior preco ja registrado.
+  final int? lojaIdMenor;
+  final int? lojaIdMaior;
 
   /// Verdadeiro quando pelo menos um registro tinha preco_ref preenchido.
   final bool usandoPrecoRef;
@@ -190,12 +196,27 @@ class EstatisticasProduto {
     final ordenados = [...precos]..sort((a, b) => a.data.compareTo(b.data));
     final valores = ordenados.map((p) => p.valorComparavel).toList();
     final ultimoRegistro = ordenados.last;
+
+    // Guarda tambem de qual loja veio o menor e o maior preco.
+    var registroMenor = ordenados.first;
+    var registroMaior = ordenados.first;
+    for (final preco in ordenados) {
+      if (preco.valorComparavel < registroMenor.valorComparavel) {
+        registroMenor = preco;
+      }
+      if (preco.valorComparavel > registroMaior.valorComparavel) {
+        registroMaior = preco;
+      }
+    }
+
     return EstatisticasProduto(
       registros: ordenados.length,
       ultimo: ultimoRegistro.valorComparavel,
-      menor: valores.reduce((a, b) => a < b ? a : b),
-      maior: valores.reduce((a, b) => a > b ? a : b),
+      menor: registroMenor.valorComparavel,
+      maior: registroMaior.valorComparavel,
       media: valores.reduce((a, b) => a + b) / valores.length,
+      lojaIdMenor: registroMenor.lojaId,
+      lojaIdMaior: registroMaior.lojaId,
       // So mostra "/kg" quando o numero realmente veio de preco_ref.
       unidadeRef:
           ultimoRegistro.precoRef != null ? ultimoRegistro.unidadeRef : null,
