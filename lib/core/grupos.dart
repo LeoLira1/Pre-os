@@ -175,9 +175,14 @@ List<SugestaoGrupo> gerarSugestoesGrupos({
                 unidadeCanonica(membroBase.embalagemUnidade)) {
           continue;
         }
-      } else if (unidadeProduto != 'kg') {
+      } else if (!_podeCompararComoProdutoFresco(
+        produto,
+        membroBase,
+        unidadeProduto,
+      )) {
         // Sem marca, a aproximacao flexivel e exclusiva de hortifruti e
-        // acougue vendidos por kg.
+        // acougue vendidos a granel. Pacotes como arroz e acucar de 5 kg nao
+        // podem entrar nessa regra, mesmo que a marca tenha vindo vazia.
         continue;
       }
 
@@ -204,6 +209,24 @@ List<SugestaoGrupo> gerarSugestoesGrupos({
     return b.nota.compareTo(a.nota);
   });
   return sugestoes;
+}
+
+bool _podeCompararComoProdutoFresco(
+  Produto a,
+  Produto b,
+  String unidade,
+) {
+  if (unidade != 'kg') return false;
+  if (a.embalagemQtd != null || b.embalagemQtd != null) return false;
+  if ((a.embalagemUnidade ?? '').trim().isNotEmpty ||
+      (b.embalagemUnidade ?? '').trim().isNotEmpty) {
+    return false;
+  }
+  final nomeA = normalizar(a.nome).replaceAll(' ', '');
+  final nomeB = normalizar(b.nome).replaceAll(' ', '');
+  final embalagemNoNome = RegExp(r'\d+(kg|g|l|ml|un)\b');
+  return !embalagemNoNome.hasMatch(nomeA) &&
+      !embalagemNoNome.hasMatch(nomeB);
 }
 
 SugestaoGrupo? _comparar({

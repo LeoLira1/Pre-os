@@ -130,6 +130,26 @@ void main() {
     expect(resultado.map((s) => s.produto.id), isNot(contains(3)));
   });
 
+  test('arroz e acucar embalados sem marca nao sao sugeridos', () {
+    final itens = [
+      produto(1, 'Açúcar Cristal Ecoçúcar 5kg'),
+      produto(2, 'Arroz Cristal Tipo 1 5kg'),
+    ];
+    final resultado = sugestoes(
+      produtos: itens,
+      grupos: [
+        grupo(10, itens[0].nome, 'kg'),
+        grupo(20, itens[1].nome, 'kg'),
+      ],
+      vinculos: const [
+        ProdutoGrupo(produtoId: 1, grupoId: 10, origem: 'automatico'),
+        ProdutoGrupo(produtoId: 2, grupoId: 20, origem: 'automatico'),
+      ],
+      unidades: {1: 'kg', 2: 'kg'},
+    );
+    expect(resultado, isEmpty);
+  });
+
   test('separar vinculo nao altera os precos', () {
     final precos = <Preco>[
       const Preco(id: 1, produtoId: 2, lojaId: 1,
