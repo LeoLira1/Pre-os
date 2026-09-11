@@ -116,30 +116,29 @@ class Turso {
   /// Migra somente produtos ainda sem vinculo. Cada produto recebe um grupo
   /// proprio; nenhum produto, preco ou tabela existente e alterado.
   Future<void> _migrarProdutosSemGrupo(LibsqlClient cliente) async {
-    final semGrupo = await cliente.query(
-      'SELECT p.id, p.nome, p.categoria, '
-      '(SELECT pr.unidade_ref FROM precos pr WHERE pr.produto_id = p.id '
-      'AND pr.unidade_ref IS NOT NULL ORDER BY pr.data DESC, pr.id DESC LIMIT 1) '
-      'AS unidade_ref FROM produtos p '
-      'WHERE NOT EXISTS (SELECT 1 FROM produto_grupos pg WHERE pg.produto_id = p.id)',
-    );
     final agora = DateTime.now().toIso8601String();
-    for (final produto in semGrupo) {
-      await cliente.execute(
-        'INSERT INTO grupos (nome, categoria, unidade_ref, criado_em) VALUES (?, ?, ?, ?)',
-        positional: [
-          comoTexto(produto['nome']) ?? '',
-          comoTexto(produto['categoria']),
-          comoTexto(produto['unidade_ref']),
-          agora,
-        ],
-      );
-      final criado = await cliente.query('SELECT id FROM grupos ORDER BY id DESC LIMIT 1');
-      await cliente.execute(
-        "INSERT OR IGNORE INTO produto_grupos (produto_id, grupo_id, origem) VALUES (?, ?, 'automatico')",
-        positional: [comoInt(produto['id']), comoInt(criado.first['id'])],
-      );
-    }
+
+    // IDs negativos reservam uma identidade estavel para o grupo automatico
+    // sem disputar os IDs positivos criados normalmente pelo SQLite. Assim a
+    // migracao inteira precisa de apenas duas chamadas ao Turso, mesmo com
+    // centenas de produtos, e pode ser repetida depois de uma interrupcao.
+    await cliente.execute(
+      'INSERT OR IGNORE INTO grupos (id, nome, categoria, unidade_ref, criado_em) '
+      'SELECT -p.id, p.nome, p.categoria, '
+      '(SELECT pr.unidade_ref FROM precos pr WHERE pr.produto_id = p.id '
+      'AND pr.unidade_ref IS NOT NULL ORDER BY pr.data DESC, pr.id DESC LIMIT 1), '
+      '? FROM produtos p '
+      'WHERE NOT EXISTS ('
+      'SELECT 1 FROM produto_grupos pg WHERE pg.produto_id = p.id)',
+      positional: [agora],
+    );
+    await cliente.execute(
+      "INSERT OR IGNORE INTO produto_grupos (produto_id, grupo_id, origem) "
+      "SELECT p.id, -p.id, 'automatico' FROM produtos p "
+      'WHERE NOT EXISTS ('
+      'SELECT 1 FROM produto_grupos pg WHERE pg.produto_id = p.id) '
+      'AND EXISTS (SELECT 1 FROM grupos g WHERE g.id = -p.id)',
+    );
   }
 
   Future<bool> _colunaExiste(
