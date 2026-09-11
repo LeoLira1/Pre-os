@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/comparacao_lojas.dart';
 import '../core/formato.dart';
 import '../dados/estado_app.dart';
 import 'produto_pagina.dart';
@@ -17,6 +18,7 @@ class ProdutosPagina extends StatefulWidget {
 class _ProdutosPaginaState extends State<ProdutosPagina> {
   final TextEditingController _busca = TextEditingController();
   String? _categoria;
+  int? _lojaId;
 
   @override
   void dispose() {
@@ -46,9 +48,11 @@ class _ProdutosPaginaState extends State<ProdutosPagina> {
   Widget build(BuildContext context) {
     final estado = widget.estado;
     final categorias = estado.categorias;
+    final lojas = estado.lojas;
     final produtos = estado.produtosFiltrados(
       busca: _busca.text,
       categoria: _categoria,
+      lojaId: _lojaId,
     );
 
     return Column(
@@ -127,6 +131,36 @@ class _ProdutosPaginaState extends State<ProdutosPagina> {
               ],
             ),
           ),
+        if (lojas.length > 1)
+          SizedBox(
+            height: 48,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    avatar: const Icon(Icons.storefront_outlined, size: 18),
+                    label: const Text('Todas as lojas'),
+                    selected: _lojaId == null,
+                    onSelected: (_) => setState(() => _lojaId = null),
+                  ),
+                ),
+                for (final loja in lojas)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: Text(nomeCurtoLoja(loja.nome)),
+                      selected: _lojaId == loja.id,
+                      onSelected: (marcada) => setState(
+                        () => _lojaId = marcada ? loja.id : null,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         Expanded(
           child: produtos.isEmpty
               ? _Vazio(estado: estado, filtrando: _temFiltro)
@@ -157,7 +191,8 @@ class _ProdutosPaginaState extends State<ProdutosPagina> {
     );
   }
 
-  bool get _temFiltro => _busca.text.isNotEmpty || _categoria != null;
+  bool get _temFiltro =>
+      _busca.text.isNotEmpty || _categoria != null || _lojaId != null;
 }
 
 class _CartaoProduto extends StatelessWidget {
@@ -169,7 +204,6 @@ class _CartaoProduto extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final produto = resumo.produto;
-    final estatisticas = resumo.estatisticas;
     final textos = Theme.of(context).textTheme;
     final cores = Theme.of(context).colorScheme;
     final detalhe = descreverProduto(
@@ -177,6 +211,7 @@ class _CartaoProduto extends StatelessWidget {
       embalagemQtd: produto.embalagemQtd,
       embalagemUnidade: produto.embalagemUnidade,
     );
+    final barata = resumo.maisBarata;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8),
@@ -184,62 +219,214 @@ class _CartaoProduto extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(14),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      produto.nome,
-                      style: textos.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          produto.nome,
+                          style: textos.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        if (detalhe.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            detalhe,
+                            style: textos.bodySmall
+                                ?.copyWith(color: cores.onSurfaceVariant),
+                          ),
+                        ],
+                      ],
                     ),
-                    if (detalhe.isNotEmpty) ...[
-                      const SizedBox(height: 2),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // O preco grande e o da loja mais barata.
                       Text(
-                        detalhe,
+                        formatarMoeda(barata?.preco),
+                        style: textos.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: cores.primary,
+                        ),
+                      ),
+                      if (barata?.precoRef != null)
+                        Text(
+                          formatarPrecoRef(
+                            barata!.precoRef,
+                            barata.unidadeRef,
+                          ),
+                          style: textos.bodySmall
+                              ?.copyWith(color: cores.onSurfaceVariant),
+                        ),
+                    ],
+                  ),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (resumo.temVariasLojas)
+                _ListaDeLojas(lojas: resumo.porLoja)
+              else if (barata != null)
+                // Preco em uma loja so: basta dizer qual e.
+                Row(
+                  children: [
+                    Icon(
+                      Icons.storefront_outlined,
+                      size: 14,
+                      color: cores.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        barata.nomeLoja,
                         style: textos.bodySmall
                             ?.copyWith(color: cores.onSurfaceVariant),
                       ),
-                    ],
-                    const SizedBox(height: 8),
+                    ),
                     Text(
-                      formatarData(estatisticas.dataUltimo),
+                      formatarData(barata.data),
                       style: textos.labelSmall
                           ?.copyWith(color: cores.onSurfaceVariant),
                     ),
                   ],
+                )
+              else
+                Text(
+                  'Sem preco registrado',
+                  style: textos.bodySmall
+                      ?.copyWith(color: cores.onSurfaceVariant),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    formatarMoeda(resumo.ultimoRegistro?.preco),
-                    style: textos.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: cores.primary,
-                    ),
-                  ),
-                  if (estatisticas.unidadeRef != null)
-                    Text(
-                      formatarPrecoRef(
-                        estatisticas.ultimo,
-                        estatisticas.unidadeRef,
-                      ),
-                      style: textos.bodySmall
-                          ?.copyWith(color: cores.onSurfaceVariant),
-                    ),
-                ],
-              ),
-              const Icon(Icons.chevron_right),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Uma linha por loja, da mais barata para a mais cara.
+class _ListaDeLojas extends StatelessWidget {
+  const _ListaDeLojas({required this.lojas});
+
+  final List<PrecoNaLoja> lojas;
+
+  @override
+  Widget build(BuildContext context) {
+    final textos = Theme.of(context).textTheme;
+    final cores = Theme.of(context).colorScheme;
+    // Verde que funciona tanto no tema claro quanto no escuro.
+    final verde = Theme.of(context).brightness == Brightness.dark
+        ? Colors.green.shade300
+        : Colors.green.shade700;
+
+    return Column(
+      children: [
+        for (var i = 0; i < lojas.length; i++)
+          Builder(
+            builder: (context) {
+              final loja = lojas[i];
+              final ehMaisBarata = i == 0;
+              final antiga = estaDesatualizada(loja, lojas);
+              final cor = ehMaisBarata ? verde : cores.onSurfaceVariant;
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: ehMaisBarata
+                      ? verde.withValues(alpha: 0.10)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: ehMaisBarata
+                        ? verde.withValues(alpha: 0.35)
+                        : cores.outlineVariant,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 6,
+                        runSpacing: 2,
+                        children: [
+                          Text(
+                            loja.nomeLoja,
+                            style: textos.bodySmall?.copyWith(
+                              color: cor,
+                              fontWeight: ehMaisBarata
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                          if (ehMaisBarata)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: verde.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                'mais barato',
+                                style: textos.labelSmall?.copyWith(
+                                  color: verde,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          // So marca a data quando a loja esta com preco
+                          // mais velho que o das outras.
+                          if (antiga)
+                            Text(
+                              formatarData(loja.data),
+                              style: textos.labelSmall?.copyWith(
+                                color: cores.onSurfaceVariant,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          formatarMoeda(loja.preco),
+                          style: textos.bodySmall?.copyWith(
+                            color: cor,
+                            fontWeight: ehMaisBarata
+                                ? FontWeight.w700
+                                : FontWeight.w600,
+                          ),
+                        ),
+                        if (loja.precoRef != null)
+                          Text(
+                            formatarPrecoRef(loja.precoRef, loja.unidadeRef),
+                            style: textos.labelSmall
+                                ?.copyWith(color: cores.onSurfaceVariant),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+      ],
     );
   }
 }

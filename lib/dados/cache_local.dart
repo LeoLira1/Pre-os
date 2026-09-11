@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
+import '../core/vinculo.dart';
 import '../modelos/modelos.dart';
 import 'turso.dart';
 
@@ -12,12 +13,20 @@ class CacheConteudo {
     required this.lojas,
     required this.produtos,
     required this.precos,
+    this.apelidos = const <Apelido>[],
+    this.custoAcumuladoUsd = 0,
     this.atualizadoEm,
   });
 
   final List<Loja> lojas;
   final List<Produto> produtos;
   final List<Preco> precos;
+
+  /// Textos de tabloide ja vinculados, usados para reconhecer o produto.
+  final List<Apelido> apelidos;
+
+  /// Quanto ja foi gasto na API somando todas as importacoes por foto.
+  final double custoAcumuladoUsd;
   final DateTime? atualizadoEm;
 
   static const CacheConteudo vazio = CacheConteudo(
@@ -56,6 +65,11 @@ class CacheLocal {
         precos: (mapa['precos'] as List<dynamic>? ?? [])
             .map((e) => Preco.doMapa(Map<String, dynamic>.from(e as Map)))
             .toList(),
+        apelidos: (mapa['apelidos'] as List<dynamic>? ?? [])
+            .map((e) => Apelido.doMapa(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+        custoAcumuladoUsd:
+            (mapa['custo_acumulado_usd'] as num?)?.toDouble() ?? 0,
         atualizadoEm: DateTime.tryParse(mapa['atualizado_em']?.toString() ?? ''),
       );
     } catch (_) {
@@ -73,12 +87,16 @@ class CacheLocal {
         'lojas': fotografia.lojas.map((e) => e.paraMapa()).toList(),
         'produtos': fotografia.produtos.map((e) => e.paraMapa()).toList(),
         'precos': fotografia.precos.map((e) => e.paraMapa()).toList(),
+        'apelidos': fotografia.apelidos.map((e) => e.paraMapa()).toList(),
+        'custo_acumulado_usd': fotografia.custoAcumuladoUsd,
       }),
     );
     return CacheConteudo(
       lojas: fotografia.lojas,
       produtos: fotografia.produtos,
       precos: fotografia.precos,
+      apelidos: fotografia.apelidos,
+      custoAcumuladoUsd: fotografia.custoAcumuladoUsd,
       atualizadoEm: agora,
     );
   }

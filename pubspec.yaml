@@ -26,6 +26,14 @@ dependencies:
   path_provider: ^2.1.6
   # Busca ignorando acentos.
   diacritic: ^0.1.6
+  # Fotos do tabloide: galeria e camera.
+  image_picker: ^1.2.3
+  # Reduz a foto antes de enviar para a API.
+  image: ^4.9.2
+  # Chamadas HTTP para a API da DeepSeek.
+  http: ^1.6.0
+  # Identifica cada foto pelo conteudo, para nao extrair duas vezes.
+  crypto: ^3.0.7
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
@@ -35,3 +43,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    # Instrucoes enviadas ao modelo. Ficam em arquivo para facilitar ajustes.
+    - assets/prompts/

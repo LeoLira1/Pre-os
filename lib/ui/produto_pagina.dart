@@ -59,7 +59,11 @@ class ProdutoPagina extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               const SizedBox(height: 12),
-              GraficoPrecos(precos: precos, unidadeRef: estatisticas.unidadeRef),
+              GraficoPrecos(
+                precos: precos,
+                unidadeRef: estatisticas.unidadeRef,
+                nomeDaLoja: estado.nomeDaLoja,
+              ),
               const SizedBox(height: 24),
               Text(
                 'Registros (${historico.length})',
@@ -77,7 +81,7 @@ class ProdutoPagina extends StatelessWidget {
                 for (final preco in historico)
                   _ItemHistorico(
                     preco: preco,
-                    loja: estado.nomeDaLoja(preco.lojaId),
+                    loja: nomeCurtoLoja(estado.nomeDaLoja(preco.lojaId)),
                   ),
             ],
           ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../core/custo.dart';
 import '../dados/estado_app.dart';
 import '../dados/turso.dart';
 
@@ -25,6 +26,16 @@ class _ConfiguracaoPaginaState extends State<ConfiguracaoPagina> {
   late final TextEditingController _deepseek =
       TextEditingController(text: widget.estado.chaveDeepseek);
 
+  late final TextEditingController _precoEntrada = TextEditingController(
+    text: _semZerosAtoa(widget.estado.precosApi.entradaSemCache),
+  );
+  late final TextEditingController _precoCache = TextEditingController(
+    text: _semZerosAtoa(widget.estado.precosApi.entradaComCache),
+  );
+  late final TextEditingController _precoSaida = TextEditingController(
+    text: _semZerosAtoa(widget.estado.precosApi.saida),
+  );
+
   bool _mostrarToken = false;
   bool _mostrarDeepseek = false;
   bool _testando = false;
@@ -36,7 +47,37 @@ class _ConfiguracaoPaginaState extends State<ConfiguracaoPagina> {
     _url.dispose();
     _token.dispose();
     _deepseek.dispose();
+    _precoEntrada.dispose();
+    _precoCache.dispose();
+    _precoSaida.dispose();
     super.dispose();
+  }
+
+  /// Guarda a tabela de precos como ela esta nos campos.
+  Future<void> _salvarPrecos({bool? picoDobra}) async {
+    final atual = widget.estado.precosApi;
+    await widget.estado.salvarPrecosApi(
+      atual.copiarCom(
+        entradaSemCache: _numero(_precoEntrada.text) ?? atual.entradaSemCache,
+        entradaComCache: _numero(_precoCache.text) ?? atual.entradaComCache,
+        saida: _numero(_precoSaida.text) ?? atual.saida,
+        picoDobra: picoDobra,
+      ),
+    );
+  }
+
+  static double? _numero(String texto) {
+    final limpo = texto.trim().replaceAll(',', '.');
+    if (limpo.isEmpty) return null;
+    return double.tryParse(limpo);
+  }
+
+  /// Mostra 0.15 em vez de 0.150000000000000002.
+  static String _semZerosAtoa(double valor) {
+    var texto = valor.toStringAsFixed(6);
+    texto = texto.replaceFirst(RegExp(r'0+$'), '');
+    texto = texto.replaceFirst(RegExp(r'\.$'), '');
+    return texto.isEmpty ? '0' : texto;
   }
 
   Future<void> _salvar() async {
@@ -176,7 +217,7 @@ class _ConfiguracaoPaginaState extends State<ConfiguracaoPagina> {
           obscureText: !_mostrarDeepseek,
           decoration: InputDecoration(
             labelText: 'Chave da API DeepSeek',
-            helperText: 'Ainda nao usada. Sera necessaria na leitura por foto.',
+            helperText: 'Usada para ler os precos das fotos do tabloide.',
             prefixIcon: const Icon(Icons.smart_toy_outlined),
             suffixIcon: IconButton(
               icon: Icon(
@@ -246,6 +287,119 @@ class _ConfiguracaoPaginaState extends State<ConfiguracaoPagina> {
             ),
           ),
         ],
+        const SizedBox(height: 28),
+        Text(
+          'Leitura de fotos',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Ajustes do modelo que le os tabloides.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Column(
+            children: [
+              SwitchListTile(
+                value: estado.raciocinio,
+                onChanged: (ligado) => estado.salvarRaciocinio(ligado),
+                title: const Text('Raciocinio na extracao'),
+                subtitle: const Text(
+                  'Desligado sai mais rapido e mais barato. Ligue para '
+                  'comparar a qualidade em tabloides dificeis.',
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        Text(
+          'Custo da API',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Precos em dolares por milhao de tokens. Os valores ja vem '
+          'preenchidos com a tabela da DeepSeek fora do horario de pico.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _precoEntrada,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Entrada',
+                  helperText: 'sem cache',
+                  isDense: true,
+                ),
+                onChanged: (_) => _salvarPrecos(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _precoCache,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Entrada',
+                  helperText: 'com cache',
+                  isDense: true,
+                ),
+                onChanged: (_) => _salvarPrecos(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _precoSaida,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Saida',
+                  helperText: 'resposta',
+                  isDense: true,
+                ),
+                onChanged: (_) => _salvarPrecos(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Column(
+            children: [
+              SwitchListTile(
+                value: estado.precosApi.picoDobra,
+                onChanged: (ligado) => _salvarPrecos(picoDobra: ligado),
+                title: const Text('Horario de pico dobra o preco'),
+                subtitle: Text(
+                  'Pico: 01:00-04:00 e 06:00-10:00 UTC, de segunda a sexta. '
+                  'Agora ${estaNoHorarioDePico(DateTime.now()) ? 'E' : 'NAO e'} '
+                  'horario de pico.',
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.receipt_long_outlined),
+                title: const Text('Total gasto ate agora'),
+                subtitle: const Text('Somando todas as importacoes por foto'),
+                trailing: Text(
+                  formatarUsd(estado.custoAcumuladoUsd),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 28),
         Text('Cache local', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 4),

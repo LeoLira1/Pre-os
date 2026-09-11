@@ -50,6 +50,22 @@ String descreverProduto({
   return partes.join(' - ');
 }
 
+/// Nome curto da loja para caber nas listas.
+///
+/// Tira "Supermercado" ou "Supermercados" do comeco:
+/// "Supermercado Varejao" vira "Varejao".
+String nomeCurtoLoja(String? nome) {
+  final texto = (nome ?? '').trim();
+  if (texto.isEmpty) return '';
+  final semPrefixo = texto.replaceFirst(
+    RegExp(r'^supermercados?\s+', caseSensitive: false),
+    '',
+  );
+  final limpo = semPrefixo.trim();
+  // Se a loja se chama so "Supermercado", mantem o nome original.
+  return limpo.isEmpty ? texto : limpo;
+}
+
 /// Rotulo amigavel para o tipo do registro de preco.
 String rotuloTipo(String? tipo) {
   switch (tipo) {

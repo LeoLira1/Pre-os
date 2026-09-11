@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../dados/estado_app.dart';
 import 'configuracao_pagina.dart';
-import 'importar_pagina.dart';
+import 'importar_hub_pagina.dart';
 import 'produtos_pagina.dart';
 
 /// Casca do aplicativo com as tres abas: Produtos, Importar e Configuracao.
@@ -25,7 +25,7 @@ class _TelaInicioState extends State<TelaInicio> {
       builder: (context, _) {
         final paginas = <Widget>[
           ProdutosPagina(estado: widget.estado),
-          ImportarPagina(estado: widget.estado),
+          ImportarHubPagina(estado: widget.estado),
           ConfiguracaoPagina(estado: widget.estado),
         ];
         return Scaffold(

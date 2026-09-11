@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart';
 
+import '../core/comparacao_lojas.dart';
+import '../core/custo.dart';
 import '../core/formato.dart';
 import '../core/texto.dart';
+import '../core/vinculo.dart';
 import '../modelos/modelos.dart';
 import 'cache_local.dart';
 import 'preferencias.dart';
@@ -13,6 +16,7 @@ class ProdutoResumo {
     required this.produto,
     required this.estatisticas,
     this.ultimoRegistro,
+    this.porLoja = const <PrecoNaLoja>[],
   });
 
   final Produto produto;
@@ -20,6 +24,14 @@ class ProdutoResumo {
 
   /// Registro de preco mais recente deste produto, quando houver.
   final Preco? ultimoRegistro;
+
+  /// Ultimo preco em cada loja, do mais barato para o mais caro.
+  final List<PrecoNaLoja> porLoja;
+
+  /// A loja onde esta mais barato, quando ha precos.
+  PrecoNaLoja? get maisBarata => porLoja.isEmpty ? null : porLoja.first;
+
+  bool get temVariasLojas => porLoja.length > 1;
 }
 
 /// Estado central do aplicativo: le do cache, sincroniza com o Turso e
@@ -38,6 +50,15 @@ class EstadoApp extends ChangeNotifier {
   String token = '';
   String chaveDeepseek = '';
 
+  /// Modo de raciocinio do modelo na extracao por foto.
+  bool raciocinio = false;
+
+  /// Precos da API usados para estimar o custo.
+  TabelaPrecos precosApi = const TabelaPrecos();
+
+  /// Loja escolhida na ultima importacao por foto.
+  String ultimaLoja = '';
+
   CacheConteudo _conteudo = CacheConteudo.vazio;
   bool carregando = true;
   bool sincronizando = false;
@@ -47,6 +68,56 @@ class EstadoApp extends ChangeNotifier {
   DateTime? get atualizadoEm => _conteudo.atualizadoEm;
   bool get temCredenciais => url.trim().isNotEmpty && token.trim().isNotEmpty;
   bool get temDados => !_conteudo.estaVazio;
+  bool get temChaveDeepseek => chaveDeepseek.trim().isNotEmpty;
+
+  List<Produto> get produtos => _conteudo.produtos;
+  List<Apelido> get apelidos => _conteudo.apelidos;
+  List<Loja> get lojas => _conteudo.lojas;
+  double get custoAcumuladoUsd => _conteudo.custoAcumuladoUsd;
+
+  /// Nomes das lojas em ordem alfabetica, para o seletor da importacao.
+  List<String> get nomesDasLojas {
+    final nomes = _conteudo.lojas.map((l) => l.nome).toList();
+    nomes.sort((a, b) => normalizar(a).compareTo(normalizar(b)));
+    return nomes;
+  }
+
+  /// Media historica do produto, na mesma base usada nas estatisticas
+  /// (preco_ref quando existe, senao preco). Null quando nao ha historico.
+  double? mediaHistorica(int produtoId) {
+    final precos = precosDoProduto(produtoId);
+    if (precos.isEmpty) return null;
+    final soma = precos.fold<double>(0, (t, p) => t + p.valorComparavel);
+    return soma / precos.length;
+  }
+
+  /// Preco ja gravado para este produto nesta loja, data e tipo.
+  /// Null quando ainda nao existe registro.
+  Preco? precoJaRegistrado({
+    required int produtoId,
+    required int lojaId,
+    required String data,
+    required String tipo,
+  }) {
+    for (final preco in _conteudo.precos) {
+      if (preco.produtoId == produtoId &&
+          preco.lojaId == lojaId &&
+          preco.data == data &&
+          preco.tipo == tipo) {
+        return preco;
+      }
+    }
+    return null;
+  }
+
+  /// Id da loja pelo nome, ignorando acentos e maiusculas. Null se for nova.
+  int? idDaLoja(String nome) {
+    final alvo = normalizar(nome);
+    for (final loja in _conteudo.lojas) {
+      if (normalizar(loja.nome) == alvo) return loja.id;
+    }
+    return null;
+  }
 
   Map<int, Loja> get lojasPorId => {for (final l in _conteudo.lojas) l.id: l};
 
@@ -55,6 +126,9 @@ class EstadoApp extends ChangeNotifier {
     url = await _preferencias.lerUrl();
     token = await _preferencias.lerToken();
     chaveDeepseek = await _preferencias.lerChaveDeepseek();
+    raciocinio = await _preferencias.lerRaciocinio();
+    precosApi = await _preferencias.lerPrecos();
+    ultimaLoja = await _preferencias.lerUltimaLoja();
     _conteudo = await _cache.ler();
     carregando = false;
     notifyListeners();
@@ -73,6 +147,24 @@ class EstadoApp extends ChangeNotifier {
     url = novaUrl.trim();
     token = novoToken.trim();
     chaveDeepseek = novaChaveDeepseek.trim();
+    notifyListeners();
+  }
+
+  Future<void> salvarRaciocinio(bool ligado) async {
+    await _preferencias.salvarRaciocinio(ligado);
+    raciocinio = ligado;
+    notifyListeners();
+  }
+
+  Future<void> salvarPrecosApi(TabelaPrecos novos) async {
+    await _preferencias.salvarPrecos(novos);
+    precosApi = novos;
+    notifyListeners();
+  }
+
+  Future<void> salvarUltimaLoja(String loja) async {
+    await _preferencias.salvarUltimaLoja(loja);
+    ultimaLoja = loja.trim();
     notifyListeners();
   }
 
@@ -136,6 +228,7 @@ class EstadoApp extends ChangeNotifier {
   List<ProdutoResumo> produtosFiltrados({
     String busca = '',
     String? categoria,
+    int? lojaId,
   }) {
     final termo = normalizar(busca);
     final precosPorProduto = <int, List<Preco>>{};
@@ -152,12 +245,19 @@ class EstadoApp extends ChangeNotifier {
         continue;
       }
       final precos = precosPorProduto[produto.id] ?? const <Preco>[];
+      // Filtro por loja: so entra quem tem preco naquela loja.
+      if (lojaId != null && !precos.any((p) => p.lojaId == lojaId)) continue;
+
       final ordenados = [...precos]..sort((a, b) => a.data.compareTo(b.data));
       resultado.add(
         ProdutoResumo(
           produto: produto,
           estatisticas: EstatisticasProduto.calcular(ordenados),
           ultimoRegistro: ordenados.isEmpty ? null : ordenados.last,
+          porLoja: compararLojas(
+            precos: ordenados,
+            nomeDaLoja: nomeDaLoja,
+          ),
         ),
       );
     }
