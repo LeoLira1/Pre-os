@@ -31,6 +31,7 @@ class Fotografia {
     this.grupos = const <Grupo>[],
     this.produtoGrupos = const <ProdutoGrupo>[],
     this.sugestoesRejeitadas = const <SugestaoRejeitada>[],
+    this.sugestoesGenericasRejeitadas = const <SugestaoGenericaRejeitada>[],
     this.apelidos = const <Apelido>[],
     this.custoAcumuladoUsd = 0,
   });
@@ -41,6 +42,9 @@ class Fotografia {
   final List<Grupo> grupos;
   final List<ProdutoGrupo> produtoGrupos;
   final List<SugestaoRejeitada> sugestoesRejeitadas;
+
+  /// Sugestoes de grupo generico ja recusadas, para nao voltarem sozinhas.
+  final List<SugestaoGenericaRejeitada> sugestoesGenericasRejeitadas;
 
   /// Textos de tabloide ja vinculados a um produto.
   final List<Apelido> apelidos;
@@ -167,6 +171,8 @@ class Turso {
     final produtoGrupos = await cliente.query('SELECT * FROM produto_grupos');
     final sugestoesRejeitadas =
         await cliente.query('SELECT * FROM sugestoes_rejeitadas');
+    final genericasRejeitadas =
+        await cliente.query('SELECT * FROM sugestoes_genericas_rejeitadas');
     final custo = await cliente.query(
       'SELECT COALESCE(SUM(custo_estimado_usd), 0) AS total FROM importacoes',
     );
@@ -179,6 +185,8 @@ class Turso {
       produtoGrupos: produtoGrupos.map(ProdutoGrupo.doMapa).toList(),
       sugestoesRejeitadas:
           sugestoesRejeitadas.map(SugestaoRejeitada.doMapa).toList(),
+      sugestoesGenericasRejeitadas:
+          genericasRejeitadas.map(SugestaoGenericaRejeitada.doMapa).toList(),
       apelidos: apelidos.map(Apelido.doMapa).toList(),
       custoAcumuladoUsd: comoDouble(custo.first['total']) ?? 0,
     );
@@ -474,7 +482,132 @@ extension GestaoDeGrupos on Turso {
     final limpo = nome.trim();
     if (limpo.isEmpty) throw const EstadoErrorGrupo('Informe o nome do grupo.');
     final cliente = await conexaoPronta();
-    await cliente.execute('UPDATE grupos SET nome = ? WHERE id = ?', positional: [limpo, grupoId]);
+    final generico = await cliente.query(
+      'SELECT ignora_marca FROM grupos WHERE id = ?',
+      positional: [grupoId],
+    );
+    final ehGenerico =
+        generico.isNotEmpty && (comoInt(generico.first['ignora_marca']) ?? 0) != 0;
+    // No grupo generico o nome que aparece na tela e o nome_generico, entao
+    // os dois andam juntos.
+    if (ehGenerico) {
+      await cliente.execute(
+        'UPDATE grupos SET nome = ?, nome_generico = ? WHERE id = ?',
+        positional: [limpo, limpo, grupoId],
+      );
+    } else {
+      await cliente.execute(
+        'UPDATE grupos SET nome = ? WHERE id = ?',
+        positional: [limpo, grupoId],
+      );
+    }
+  }
+
+  /// Liga ou desliga a comparacao entre marcas de um grupo.
+  ///
+  /// Ao ligar, grava tambem o nome generico, que e o nome que passa a
+  /// aparecer na tela. Nenhum produto sai nem entra no grupo por causa disto.
+  Future<void> definirIgnoraMarca(
+    int grupoId,
+    bool ligado, {
+    String? nomeGenerico,
+  }) async {
+    final cliente = await conexaoPronta();
+    final nome = (nomeGenerico ?? '').trim();
+    if (ligado && nome.isNotEmpty) {
+      await cliente.execute(
+        'UPDATE grupos SET ignora_marca = 1, nome_generico = ?, nome = ? WHERE id = ?',
+        positional: [nome, nome, grupoId],
+      );
+    } else {
+      await cliente.execute(
+        'UPDATE grupos SET ignora_marca = ? WHERE id = ?',
+        positional: [ligado ? 1 : 0, grupoId],
+      );
+    }
+  }
+
+  /// Junta varios grupos num grupo generico so.
+  ///
+  /// O primeiro id da lista continua existindo e recebe os produtos dos
+  /// outros; os grupos que ficaram vazios sao apagados. Nenhum produto e
+  /// nenhum preco e alterado. Grupos com unidade de referencia diferente
+  /// nunca sao juntados.
+  Future<void> juntarGruposGenerico({
+    required List<int> grupoIds,
+    required String nomeGenerico,
+    bool ignoraMarca = true,
+  }) async {
+    final nome = nomeGenerico.trim();
+    if (nome.isEmpty) {
+      throw const EstadoErrorGrupo('Informe o nome do grupo generico.');
+    }
+    final ids = grupoIds.toSet().toList();
+    if (ids.length < 2) {
+      throw const EstadoErrorGrupo('Escolha pelo menos dois grupos.');
+    }
+
+    final cliente = await conexaoPronta();
+    final transacao = await cliente.transaction();
+    try {
+      final marcadores = List.filled(ids.length, '?').join(',');
+      final achados = await transacao.query(
+        'SELECT id, unidade_ref FROM grupos WHERE id IN ($marcadores)',
+        positional: ids,
+      );
+      if (achados.length != ids.length) {
+        throw const EstadoErrorGrupo('Algum grupo ja nao existe mais.');
+      }
+      final unidades = achados
+          .map((g) => normalizar(comoTexto(g['unidade_ref'])))
+          .toSet();
+      if (unidades.length > 1) {
+        throw const EstadoErrorGrupo(
+          'As unidades de referencia sao diferentes.',
+        );
+      }
+
+      final destino = ids.first;
+      final outros = ids.skip(1).toList();
+      final marcadoresOutros = List.filled(outros.length, '?').join(',');
+
+      await transacao.execute(
+        'INSERT OR IGNORE INTO produto_grupos (produto_id, grupo_id, origem) '
+        "SELECT produto_id, ?, 'generico' FROM produto_grupos "
+        'WHERE grupo_id IN ($marcadoresOutros)',
+        positional: [destino, ...outros],
+      );
+      await transacao.execute(
+        'DELETE FROM produto_grupos WHERE grupo_id IN ($marcadoresOutros)',
+        positional: outros,
+      );
+      await transacao.execute(
+        'DELETE FROM sugestoes_rejeitadas WHERE grupo_id IN ($marcadoresOutros)',
+        positional: outros,
+      );
+      await transacao.execute(
+        'DELETE FROM grupos WHERE id IN ($marcadoresOutros)',
+        positional: outros,
+      );
+      await transacao.execute(
+        'UPDATE grupos SET nome = ?, nome_generico = ?, ignora_marca = ? WHERE id = ?',
+        positional: [nome, nome, ignoraMarca ? 1 : 0, destino],
+      );
+      await transacao.commit();
+    } catch (_) {
+      await transacao.rollback();
+      rethrow;
+    }
+  }
+
+  /// Guarda que esta sugestao de grupo generico foi recusada.
+  Future<void> rejeitarSugestaoGenerica(String identidade) async {
+    final cliente = await conexaoPronta();
+    await cliente.execute(
+      'INSERT OR IGNORE INTO sugestoes_genericas_rejeitadas (identidade, criado_em) '
+      'VALUES (?, ?)',
+      positional: [identidade, DateTime.now().toIso8601String()],
+    );
   }
 }
 

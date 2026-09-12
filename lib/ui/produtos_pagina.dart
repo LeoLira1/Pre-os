@@ -206,8 +206,14 @@ class _CartaoProduto extends StatelessWidget {
     final grupo = resumo.grupo;
     final textos = Theme.of(context).textTheme;
     final cores = Theme.of(context).colorScheme;
-    final detalhe = '${resumo.produtos.length} produto${resumo.produtos.length == 1 ? '' : 's'} vinculado${resumo.produtos.length == 1 ? '' : 's'}';
+    final marcas = resumo.quantidadeDeMarcas;
+    final detalhe = resumo.generico && marcas > 1
+        ? '$marcas marcas comparadas'
+        : '${resumo.produtos.length} produto${resumo.produtos.length == 1 ? '' : 's'} vinculado${resumo.produtos.length == 1 ? '' : 's'}';
     final barata = resumo.maisBarata;
+    // No grupo generico o numero grande e o menor preco por L, kg ou un;
+    // o preco da embalagem vai embaixo, junto com a marca.
+    final porUnidade = resumo.generico && barata?.precoRef != null;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8),
@@ -225,10 +231,24 @@ class _CartaoProduto extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          grupo.nome,
-                          style: textos.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w600),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                grupo.nomeParaMostrar,
+                                style: textos.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            if (resumo.generico) ...[
+                              const SizedBox(width: 6),
+                              Icon(
+                                Icons.compare_arrows,
+                                size: 16,
+                                color: cores.primary,
+                              ),
+                            ],
+                          ],
                         ),
                         if (detalhe.isNotEmpty) ...[
                           const SizedBox(height: 2),
@@ -242,34 +262,59 @@ class _CartaoProduto extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      // O preco grande e o da loja mais barata.
-                      Text(
-                        formatarMoeda(barata?.preco),
-                        style: textos.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: cores.primary,
-                        ),
-                      ),
-                      if (barata?.precoRef != null)
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        // No grupo generico manda o menor preco por unidade
+                        // de referencia; nos demais, o preco da loja mais
+                        // barata.
                         Text(
-                          formatarPrecoRef(
-                            barata!.precoRef,
-                            barata.unidadeRef,
+                          porUnidade
+                              ? formatarPrecoRef(
+                                  barata!.precoRef,
+                                  barata.unidadeRef,
+                                )
+                              : formatarMoeda(barata?.preco),
+                          style: textos.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: cores.primary,
                           ),
-                          style: textos.bodySmall
-                              ?.copyWith(color: cores.onSurfaceVariant),
                         ),
-                    ],
+                        if (porUnidade)
+                          Text(
+                            descreverEmbalagemDoMenorPreco(
+                              marca: barata!.marca,
+                              embalagemQtd: barata.embalagemQtd,
+                              embalagemUnidade: barata.embalagemUnidade,
+                              preco: barata.preco,
+                            ),
+                            textAlign: TextAlign.end,
+                            style: textos.bodySmall
+                                ?.copyWith(color: cores.onSurfaceVariant),
+                          )
+                        else if (barata?.precoRef != null)
+                          Text(
+                            formatarPrecoRef(
+                              barata!.precoRef,
+                              barata.unidadeRef,
+                            ),
+                            style: textos.bodySmall
+                                ?.copyWith(color: cores.onSurfaceVariant),
+                          ),
+                      ],
+                    ),
                   ),
                   const Icon(Icons.chevron_right),
                 ],
               ),
               const SizedBox(height: 10),
               if (resumo.temVariasLojas)
-                _ListaDeLojas(lojas: resumo.porLoja)
+                _ListaDeLojas(
+                  lojas: resumo.porLoja,
+                  empatados: resumo.empatados,
+                  mostrarMarca: resumo.generico,
+                )
               else if (barata != null)
                 // Preco em uma loja so: basta dizer qual e.
                 Row(
@@ -321,9 +366,19 @@ class _CartaoProduto extends StatelessWidget {
 
 /// Uma linha por loja, da mais barata para a mais cara.
 class _ListaDeLojas extends StatelessWidget {
-  const _ListaDeLojas({required this.lojas});
+  const _ListaDeLojas({
+    required this.lojas,
+    this.empatados = const <int>{},
+    this.mostrarMarca = false,
+  });
 
   final List<PrecoNaLoja> lojas;
+
+  /// Lojas com menos de 2% de diferenca no preco de referencia.
+  final Set<int> empatados;
+
+  /// Num grupo generico a marca e a embalagem entram na linha da loja.
+  final bool mostrarMarca;
 
   @override
   Widget build(BuildContext context) {
@@ -377,23 +432,11 @@ class _ListaDeLojas extends StatelessWidget {
                             ),
                           ),
                           if (ehMaisBarata)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: verde.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                'mais barato',
-                                style: textos.labelSmall?.copyWith(
-                                  color: verde,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
+                            _Selo(texto: 'mais barato', cor: verde),
+                          // Diferenca menor que 2% no preco de referencia
+                          // nao e preco diferente na pratica.
+                          if (empatados.contains(i))
+                            _Selo(texto: 'empate', cor: cores.tertiary),
                           // So marca a data quando a loja esta com preco
                           // mais velho que o das outras.
                           if (antiga)
@@ -426,7 +469,17 @@ class _ListaDeLojas extends StatelessWidget {
                             style: textos.labelSmall
                                 ?.copyWith(color: cores.onSurfaceVariant),
                           ),
-                        if ((loja.nomeProduto ?? '').isNotEmpty)
+                        if (mostrarMarca && loja.marcaEEmbalagem.isNotEmpty)
+                          Text(
+                            loja.marcaEEmbalagem,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: textos.labelSmall?.copyWith(
+                              color: cores.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          )
+                        else if ((loja.nomeProduto ?? '').isNotEmpty)
                           Text(
                             loja.nomeProduto!,
                             maxLines: 1,
@@ -442,6 +495,32 @@ class _ListaDeLojas extends StatelessWidget {
             },
           ),
       ],
+    );
+  }
+}
+
+/// Etiqueta redonda usada nos selos "mais barato" e "empate".
+class _Selo extends StatelessWidget {
+  const _Selo({required this.texto, required this.cor});
+
+  final String texto;
+  final Color cor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: cor.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        texto,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: cor,
+              fontWeight: FontWeight.w700,
+            ),
+      ),
     );
   }
 }

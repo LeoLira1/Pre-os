@@ -289,6 +289,31 @@ class _ConfiguracaoPaginaState extends State<ConfiguracaoPagina> {
         ],
         const SizedBox(height: 28),
         Text(
+          'Comparacao entre marcas',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Grupo generico junta a mesma coisa de marcas e embalagens '
+          'diferentes, desde que a unidade de comparacao seja a mesma.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: SwitchListTile(
+            value: estado.compararMarcasPadrao,
+            onChanged: (ligado) => estado.salvarCompararMarcasPadrao(ligado),
+            secondary: const Icon(Icons.compare_arrows),
+            title: const Text('Comparar entre marcas por padrao'),
+            subtitle: const Text(
+              'Vale para os grupos genericos que voce aceitar na tela Juntar. '
+              'Cada grupo continua podendo ser ligado ou desligado na tela '
+              'dele.',
+            ),
+          ),
+        ),
+        const SizedBox(height: 28),
+        Text(
           'Leitura de fotos',
           style: Theme.of(context).textTheme.titleMedium,
         ),

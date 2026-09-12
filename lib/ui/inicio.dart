@@ -5,8 +5,10 @@ import 'configuracao_pagina.dart';
 import 'importar_hub_pagina.dart';
 import 'juntar_produtos_pagina.dart';
 import 'produtos_pagina.dart';
+import 'rota_compras_pagina.dart';
 
-/// Casca do aplicativo com as tres abas: Produtos, Importar e Configuracao.
+/// Casca do aplicativo com as abas Produtos, Rota, Importar, Juntar e
+/// Configuracao.
 class TelaInicio extends StatefulWidget {
   const TelaInicio({super.key, required this.estado});
 
@@ -26,10 +28,14 @@ class _TelaInicioState extends State<TelaInicio> {
       builder: (context, _) {
         final paginas = <Widget>[
           ProdutosPagina(estado: widget.estado),
+          RotaComprasPagina(estado: widget.estado),
           ImportarHubPagina(estado: widget.estado),
           JuntarProdutosPagina(estado: widget.estado),
           ConfiguracaoPagina(estado: widget.estado),
         ];
+        // Sugestoes normais mais as de comparar entre marcas.
+        final pendentes = widget.estado.sugestoesPendentes.length +
+            widget.estado.sugestoesGenericas.length;
         return Scaffold(
           body: SafeArea(child: paginas[_aba]),
           bottomNavigationBar: NavigationBar(
@@ -42,14 +48,19 @@ class _TelaInicioState extends State<TelaInicio> {
                 label: 'Produtos',
               ),
               const NavigationDestination(
+                icon: Icon(Icons.route_outlined),
+                selectedIcon: Icon(Icons.route),
+                label: 'Rota',
+              ),
+              const NavigationDestination(
                 icon: Icon(Icons.upload_file_outlined),
                 selectedIcon: Icon(Icons.upload_file),
                 label: 'Importar',
               ),
               NavigationDestination(
                 icon: Badge(
-                  isLabelVisible: widget.estado.sugestoesPendentes.isNotEmpty,
-                  label: Text('${widget.estado.sugestoesPendentes.length}'),
+                  isLabelVisible: pendentes > 0,
+                  label: Text('$pendentes'),
                   child: const Icon(Icons.merge_type_outlined),
                 ),
                 selectedIcon: const Icon(Icons.merge_type),

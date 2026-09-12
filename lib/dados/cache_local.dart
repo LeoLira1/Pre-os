@@ -16,6 +16,7 @@ class CacheConteudo {
     this.grupos = const <Grupo>[],
     this.produtoGrupos = const <ProdutoGrupo>[],
     this.sugestoesRejeitadas = const <SugestaoRejeitada>[],
+    this.sugestoesGenericasRejeitadas = const <SugestaoGenericaRejeitada>[],
     this.apelidos = const <Apelido>[],
     this.custoAcumuladoUsd = 0,
     this.atualizadoEm,
@@ -27,6 +28,9 @@ class CacheConteudo {
   final List<Grupo> grupos;
   final List<ProdutoGrupo> produtoGrupos;
   final List<SugestaoRejeitada> sugestoesRejeitadas;
+
+  /// Sugestoes de grupo generico ja recusadas.
+  final List<SugestaoGenericaRejeitada> sugestoesGenericasRejeitadas;
 
   /// Textos de tabloide ja vinculados, usados para reconhecer o produto.
   final List<Apelido> apelidos;
@@ -83,6 +87,12 @@ class CacheLocal {
                       Map<String, dynamic>.from(e as Map),
                     ))
                 .toList(),
+        sugestoesGenericasRejeitadas:
+            (mapa['sugestoes_genericas_rejeitadas'] as List<dynamic>? ?? [])
+                .map((e) => SugestaoGenericaRejeitada.doMapa(
+                      Map<String, dynamic>.from(e as Map),
+                    ))
+                .toList(),
         apelidos: (mapa['apelidos'] as List<dynamic>? ?? [])
             .map((e) => Apelido.doMapa(Map<String, dynamic>.from(e as Map)))
             .toList(),
@@ -110,6 +120,10 @@ class CacheLocal {
             fotografia.produtoGrupos.map((e) => e.paraMapa()).toList(),
         'sugestoes_rejeitadas':
             fotografia.sugestoesRejeitadas.map((e) => e.paraMapa()).toList(),
+        'sugestoes_genericas_rejeitadas': fotografia
+            .sugestoesGenericasRejeitadas
+            .map((e) => e.paraMapa())
+            .toList(),
         'apelidos': fotografia.apelidos.map((e) => e.paraMapa()).toList(),
         'custo_acumulado_usd': fotografia.custoAcumuladoUsd,
       }),
@@ -121,6 +135,7 @@ class CacheLocal {
       grupos: fotografia.grupos,
       produtoGrupos: fotografia.produtoGrupos,
       sugestoesRejeitadas: fotografia.sugestoesRejeitadas,
+      sugestoesGenericasRejeitadas: fotografia.sugestoesGenericasRejeitadas,
       apelidos: fotografia.apelidos,
       custoAcumuladoUsd: fotografia.custoAcumuladoUsd,
       atualizadoEm: agora,
