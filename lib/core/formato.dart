@@ -50,6 +50,24 @@ String descreverProduto({
   return partes.join(' - ');
 }
 
+/// "Zupp 1 L · R$ 2,49": qual embalagem deu o menor preco de referencia.
+///
+/// Usado no card do grupo generico, embaixo do preco por litro ou por quilo.
+String descreverEmbalagemDoMenorPreco({
+  String? marca,
+  double? embalagemQtd,
+  String? embalagemUnidade,
+  required double? preco,
+}) {
+  final embalagem = descreverProduto(
+    marca: marca,
+    embalagemQtd: embalagemQtd,
+    embalagemUnidade: embalagemUnidade,
+  ).replaceAll(' - ', ' ');
+  final valor = formatarMoeda(preco);
+  return embalagem.isEmpty ? valor : '$embalagem · $valor';
+}
+
 /// Nome curto da loja para caber nas listas.
 ///
 /// Tira "Supermercado" ou "Supermercados" do comeco:

@@ -15,6 +15,7 @@ class Preferencias {
   static const _chavePrecoSaida = 'preco_saida';
   static const _chavePicoDobra = 'pico_dobra';
   static const _chaveUltimaLoja = 'ultima_loja';
+  static const _chaveCompararMarcas = 'comparar_marcas_padrao';
 
   Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
 
@@ -40,6 +41,14 @@ class Preferencias {
 
   Future<void> salvarUltimaLoja(String loja) async =>
       (await _prefs).setString(_chaveUltimaLoja, loja.trim());
+
+  /// "Comparar entre marcas por padrao": os grupos genericos aceitos na tela
+  /// Juntar ja nascem comparando marcas. Ligado por padrao.
+  Future<bool> lerCompararMarcas() async =>
+      (await _prefs).getBool(_chaveCompararMarcas) ?? true;
+
+  Future<void> salvarCompararMarcas(bool ligado) async =>
+      (await _prefs).setBool(_chaveCompararMarcas, ligado);
 
   Future<TabelaPrecos> lerPrecos() async {
     final prefs = await _prefs;

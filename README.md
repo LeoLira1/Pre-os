@@ -6,6 +6,8 @@ identificar promocoes reais.
 **Fase 1**: banco de dados, importacao de CSV e consulta do historico.
 **Fase 2**: leitura dos precos direto das fotos do tabloide, com a API da
 DeepSeek.
+**Fase 3**: grupos de produto, juncao segura e **comparacao entre marcas**
+("agua sanitaria e agua sanitaria"), com rota de compras.
 
 ## Como funciona
 
@@ -25,10 +27,12 @@ DeepSeek.
 | --- | --- |
 | **Produtos** (inicial) | Busca por nome ou marca (ignora acentos e maiusculas), filtro por categoria e por loja, e **onde cada produto esta mais barato** sem precisar abrir. |
 | **Produto** | "Mais barato hoje" com a loja, menor, maior, media e numero de registros; grafico de linha por loja (ou de barras comparando lojas, quando nao ha evolucao no tempo); historico completo com data, loja, preco, tipo e observacao. |
+| **Rota de compras** | Voce marca os produtos da semana e o app diz, produto por produto, **em qual loja e de qual marca** sai mais barato por litro, quilo ou unidade, agrupado por loja. |
+| **Juntar** | Sugestoes de juncao, separadas em "Comparar entre marcas" (grupo generico) e "Mesmo produto, nomes diferentes". Da para aceitar uma a uma ou todas de uma vez. |
 | **Importar > Fotos** | Escolhe fotos do encarte (galeria ou camera), manda ler pela DeepSeek e mostra o andamento foto a foto. |
 | **Revisao** | Tudo o que foi lido, agrupado por foto, com selos de "Novo produto", "Conferir" e "Ja registrado". Da para editar, excluir e trocar o produto vinculado antes de gravar. |
 | **Importar > CSV** | Escolhe um arquivo `.csv`, mostra uma previa (novos, existentes, duplicados, linhas com erro) e so grava depois do "Confirmar importacao". |
-| **Configuracao** | URL e token do Turso, chave da API DeepSeek, raciocinio na extracao, precos da API, "Testar conexao", "Sincronizar" e "Limpar cache local". |
+| **Configuracao** | URL e token do Turso, chave da API DeepSeek, "Comparar entre marcas por padrao", raciocinio na extracao, precos da API, "Testar conexao", "Sincronizar" e "Limpar cache local". |
 
 ## Comparacao entre lojas
 
@@ -47,6 +51,61 @@ Na lista de produtos, cada card mostra onde o produto esta mais barato:
 - Os nomes saem curtos: "Supermercado Varejao" vira "Varejao".
 
 Os chips no topo filtram por categoria e por loja, carregados do banco.
+
+## Comparacao entre marcas (grupo generico)
+
+Para muita coisa a marca nao muda nada: **agua sanitaria e agua sanitaria**.
+Um grupo com `ignora_marca = 1` compara marcas e tamanhos de embalagem
+diferentes entre si, desde que a **unidade de referencia seja a mesma**.
+
+### Como o app sugere
+
+Na tela **Juntar**, a secao "Comparar entre marcas" propoe transformar varios
+grupos num grupo generico so:
+
+```
+Agua Sanitaria Qboa 2L
+Agua Sanitaria Sol 2L    ->  grupo generico "Agua Sanitaria"
+Agua Sanitaria Ype 2L
+Agua Sanitaria Zupp 1L
+```
+
+O **nome generico** e o nome sem marca e sem embalagem. Duas travas nunca
+saem:
+
+- `unidade_ref` diferente **nunca** se mistura (por L com por kg, por
+  exemplo);
+- tipo de produto diferente **nunca** se mistura: a chave generica precisa
+  ser exatamente igual, entao acucar nunca encontra arroz.
+
+Cada sugestao vem marcada como **"Generica"** e pode ser aceita uma a uma ou
+todas de uma vez. Recusar guarda a decisao, e ela nao volta na proxima
+sincronizacao.
+
+**Concentrado nunca entra sozinho no grupo do comum.** A palavra
+"concentrado" fica no nome generico, entao "Amaciante Concentrado" e
+"Amaciante" sao grupos diferentes. Os concentrados sao sugeridos entre si,
+com o aviso de que o rendimento e outro.
+
+Na tela do grupo, o interruptor **"Comparar entre marcas"** liga e desliga
+`ignora_marca` a qualquer momento, e da para **renomear** o grupo generico.
+Na **Configuracao**, "Comparar entre marcas por padrao" decide se os grupos
+genericos aceitos na tela Juntar ja nascem ligados.
+
+### Como o card aparece
+
+No card de um grupo generico:
+
+- O preco grande e o **menor preco de referencia** (por L, kg ou un), nao o
+  menor preco de embalagem.
+- Embaixo dele vem qual embalagem deu esse preco: `R$ 2,49/L` com
+  `Zupp 1 L - R$ 2,49`.
+- Uma linha por loja, ordenada pelo preco de referencia, com loja, marca,
+  embalagem, preco e preco por unidade. A primeira leva o selo
+  **"mais barato"**.
+- Duas lojas com menos de **2%** de diferenca no preco de referencia levam as
+  duas o selo **"empate"**: `R$ 2,49/L` e `R$ 2,50/L` nao sao precos
+  diferentes na pratica.
 
 ## Formato do arquivo CSV
 
@@ -121,7 +180,8 @@ resumo final.
 ## Banco de dados
 
 Tabelas criadas automaticamente: `lojas`, `produtos`, `produto_apelidos`,
-`precos` e `importacoes`. O esquema completo esta em
+`precos`, `importacoes`, `grupos`, `produto_grupos`, `sugestoes_rejeitadas` e
+`sugestoes_genericas_rejeitadas`. O esquema completo esta em
 [`lib/dados/esquema.dart`](lib/dados/esquema.dart).
 
 A **chave** do produto e `nome + marca + embalagem_qtd + embalagem_unidade`,
@@ -131,9 +191,14 @@ o mesmo produto duas vezes.
 ### Migracao segura
 
 O banco ja tem dados reais, entao nada e apagado nem recriado. Toda tabela
-usa `CREATE TABLE IF NOT EXISTS`, e coluna nova (como `precos.importacao_id`)
-so recebe `ALTER TABLE ADD COLUMN` depois de conferir com `PRAGMA table_info`
-que ela ainda nao existe.
+usa `CREATE TABLE IF NOT EXISTS`, e coluna nova (como `precos.importacao_id`,
+`grupos.ignora_marca` e `grupos.nome_generico`) so recebe
+`ALTER TABLE ADD COLUMN` depois de conferir com `PRAGMA table_info` que ela
+ainda nao existe.
+
+Em `grupos`, `ignora_marca INTEGER DEFAULT 0` nasce desligado: nenhum grupo
+que ja existe muda de comportamento sozinho. `nome_generico TEXT` so e
+preenchido quando o grupo vira generico.
 
 ## Baixar o APK
 
@@ -166,5 +231,5 @@ flutter build apk --release
 
 ## Proximas fases (ainda nao implementadas)
 
-- **Fase 3**: selos de promocao real e lista de compras com alertas.
-- **Fase 4**: leitura de QR code da NFC-e e outras lojas.
+- **Fase 4**: selos de promocao real e alertas de preco.
+- **Fase 5**: leitura de QR code da NFC-e e outras lojas.

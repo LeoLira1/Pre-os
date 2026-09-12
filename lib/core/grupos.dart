@@ -1,4 +1,5 @@
 import '../modelos/modelos.dart';
+import 'generico.dart';
 import 'similaridade.dart';
 import 'texto.dart';
 
@@ -12,6 +13,7 @@ class SugestaoGrupo {
     required this.nota,
     this.atributosDiferentes = const <String>[],
     this.parteDoNome,
+    this.generica = false,
   });
 
   final Produto produto;
@@ -20,6 +22,10 @@ class SugestaoGrupo {
   final double nota;
   final List<String> atributosDiferentes;
   final String? parteDoNome;
+
+  /// Verdadeiro quando o destino e um grupo generico, que compara marcas e
+  /// embalagens diferentes entre si.
+  final bool generica;
 }
 
 const _adjetivosIgnorados = <String>{
@@ -160,6 +166,19 @@ List<SugestaoGrupo> gerarSugestoesGrupos({
       if (unidadeCanonica(grupo.unidadeRef) != unidadeProduto) continue;
       final membros = produtoIdsPorGrupo[grupo.id] ?? const <int>{};
       if (membros.isEmpty) continue;
+
+      // Grupo generico: a marca e o tamanho da embalagem nao importam, desde
+      // que a unidade de referencia seja a mesma e o tipo de produto tambem.
+      if (grupo.ignoraMarca) {
+        final generica = _sugerirNoGrupoGenerico(
+          produto: produto,
+          grupo: grupo,
+          membros: membros.map((id) => produtosPorId[id]).nonNulls.toList(),
+        );
+        if (generica != null) sugestoes.add(generica);
+        continue;
+      }
+
       final membroBase = produtosPorId[membros.reduce((a, b) => a < b ? a : b)];
       if (membroBase == null) continue;
       if (dividirAlternativas(membroBase.nome).length > 1) continue;
@@ -209,6 +228,32 @@ List<SugestaoGrupo> gerarSugestoesGrupos({
     return b.nota.compareTo(a.nota);
   });
   return sugestoes;
+}
+
+/// Sugere um produto para um grupo generico.
+///
+/// So aceita quando o nome sem marca e sem embalagem e exatamente o mesmo,
+/// entao acucar nunca cai no grupo do arroz. Concentrado nunca entra no
+/// grupo do comum: o rendimento e outro.
+SugestaoGrupo? _sugerirNoGrupoGenerico({
+  required Produto produto,
+  required Grupo grupo,
+  required List<Produto> membros,
+}) {
+  final resumo = descreverGrupo(grupo: grupo, produtos: membros);
+  if (resumo == null) return null;
+  if (ehConcentrado(produto.nome) != resumo.concentrado) return null;
+
+  final chaveProduto = chaveGenerica(produto.nome, marca: produto.marca);
+  if (chaveProduto.isEmpty || chaveProduto != resumo.chave) return null;
+
+  return SugestaoGrupo(
+    produto: produto,
+    grupo: grupo,
+    forca: ForcaSugestao.forte,
+    nota: 1,
+    generica: true,
+  );
 }
 
 bool _podeCompararComoProdutoFresco(

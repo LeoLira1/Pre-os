@@ -93,6 +93,8 @@ class Grupo {
     required this.nome,
     this.categoria,
     this.unidadeRef,
+    this.ignoraMarca = false,
+    this.nomeGenerico,
     this.criadoEm,
   });
 
@@ -100,13 +102,29 @@ class Grupo {
   final String nome;
   final String? categoria;
   final String? unidadeRef;
+
+  /// Grupo generico: aceita produtos de marcas diferentes e de tamanhos de
+  /// embalagem diferentes, desde que a unidade de referencia seja a mesma.
+  final bool ignoraMarca;
+
+  /// O nome sem marca e sem embalagem ("Agua Sanitaria"). So e preenchido
+  /// nos grupos genericos.
+  final String? nomeGenerico;
   final String? criadoEm;
+
+  /// O que mostrar na tela: o nome generico quando existe.
+  String get nomeParaMostrar {
+    final generico = (nomeGenerico ?? '').trim();
+    return generico.isEmpty ? nome : generico;
+  }
 
   factory Grupo.doMapa(Map<String, dynamic> m) => Grupo(
         id: comoInt(m['id'])!,
         nome: comoTexto(m['nome']) ?? '',
         categoria: comoTexto(m['categoria']),
         unidadeRef: comoTexto(m['unidade_ref']),
+        ignoraMarca: (comoInt(m['ignora_marca']) ?? 0) != 0,
+        nomeGenerico: comoTexto(m['nome_generico']),
         criadoEm: comoTexto(m['criado_em']),
       );
 
@@ -115,6 +133,8 @@ class Grupo {
         'nome': nome,
         'categoria': categoria,
         'unidade_ref': unidadeRef,
+        'ignora_marca': ignoraMarca ? 1 : 0,
+        'nome_generico': nomeGenerico,
         'criado_em': criadoEm,
       };
 }
@@ -164,6 +184,28 @@ class SugestaoRejeitada {
   Map<String, dynamic> paraMapa() => {
         'produto_id': produtoId,
         'grupo_id': grupoId,
+        'criado_em': criadoEm,
+      };
+}
+
+/// Uma sugestao de grupo generico que o usuario recusou.
+///
+/// Guardada pela identidade da sugestao (nome generico + unidade de
+/// referencia), para nao aparecer de novo a cada sincronizacao.
+class SugestaoGenericaRejeitada {
+  const SugestaoGenericaRejeitada({required this.identidade, this.criadoEm});
+
+  final String identidade;
+  final String? criadoEm;
+
+  factory SugestaoGenericaRejeitada.doMapa(Map<String, dynamic> m) =>
+      SugestaoGenericaRejeitada(
+        identidade: comoTexto(m['identidade']) ?? '',
+        criadoEm: comoTexto(m['criado_em']),
+      );
+
+  Map<String, dynamic> paraMapa() => {
+        'identidade': identidade,
         'criado_em': criadoEm,
       };
 }

@@ -3,7 +3,9 @@ import 'package:flutter/foundation.dart';
 import '../core/comparacao_lojas.dart';
 import '../core/custo.dart';
 import '../core/formato.dart';
+import '../core/generico.dart';
 import '../core/grupos.dart';
+import '../core/rota_compras.dart';
 import '../core/texto.dart';
 import '../core/vinculo.dart';
 import '../modelos/modelos.dart';
@@ -41,6 +43,7 @@ class GrupoResumo {
     required this.produtos,
     required this.estatisticas,
     required this.porLoja,
+    this.empatados = const <int>{},
     this.ultimoRegistro,
   });
 
@@ -48,10 +51,23 @@ class GrupoResumo {
   final List<Produto> produtos;
   final EstatisticasProduto estatisticas;
   final List<PrecoNaLoja> porLoja;
+
+  /// Indices de [porLoja] praticamente empatados com o mais barato.
+  final Set<int> empatados;
   final Preco? ultimoRegistro;
 
   PrecoNaLoja? get maisBarata => porLoja.isEmpty ? null : porLoja.first;
   bool get temVariasLojas => porLoja.length > 1;
+
+  /// Grupo generico: compara marcas e embalagens diferentes entre si.
+  bool get generico => grupo.ignoraMarca;
+
+  /// Quantas marcas diferentes estao neste grupo.
+  int get quantidadeDeMarcas => produtos
+      .map((p) => normalizar(p.marca))
+      .where((m) => m.isNotEmpty)
+      .toSet()
+      .length;
 }
 
 /// Estado central do aplicativo: le do cache, sincroniza com o Turso e
@@ -78,6 +94,9 @@ class EstadoApp extends ChangeNotifier {
 
   /// Loja escolhida na ultima importacao por foto.
   String ultimaLoja = '';
+
+  /// Os grupos genericos aceitos na tela Juntar ja nascem comparando marcas.
+  bool compararMarcasPadrao = true;
 
   CacheConteudo _conteudo = CacheConteudo.vazio;
   bool carregando = true;
@@ -151,6 +170,7 @@ class EstadoApp extends ChangeNotifier {
     raciocinio = await _preferencias.lerRaciocinio();
     precosApi = await _preferencias.lerPrecos();
     ultimaLoja = await _preferencias.lerUltimaLoja();
+    compararMarcasPadrao = await _preferencias.lerCompararMarcas();
     _conteudo = await _cache.ler();
     carregando = false;
     notifyListeners();
@@ -181,6 +201,12 @@ class EstadoApp extends ChangeNotifier {
   Future<void> salvarPrecosApi(TabelaPrecos novos) async {
     await _preferencias.salvarPrecos(novos);
     precosApi = novos;
+    notifyListeners();
+  }
+
+  Future<void> salvarCompararMarcasPadrao(bool ligado) async {
+    await _preferencias.salvarCompararMarcas(ligado);
+    compararMarcasPadrao = ligado;
     notifyListeners();
   }
 
@@ -260,6 +286,7 @@ class EstadoApp extends ChangeNotifier {
       if (categoria != null && (grupo.categoria ?? '') != categoria) continue;
       if (termo.isNotEmpty &&
           !contemBusca(grupo.nome, termo) &&
+          !contemBusca(grupo.nomeGenerico, termo) &&
           !membros.any((p) =>
               contemBusca(p.nome, termo) || contemBusca(p.marca, termo))) {
         continue;
@@ -269,17 +296,20 @@ class EstadoApp extends ChangeNotifier {
       if (lojaId != null && !precos.any((p) => p.lojaId == lojaId)) continue;
 
       final ordenados = [...precos]..sort((a, b) => a.data.compareTo(b.data));
+      final porLoja = compararLojas(
+        precos: ordenados,
+        nomeDaLoja: nomeDaLoja,
+        nomeDoProduto: (id) => produtoPorId(id)?.nome ?? 'Produto $id',
+        produtoPorId: produtoPorId,
+      );
       resultado.add(
         GrupoResumo(
           grupo: grupo,
           produtos: membros,
           estatisticas: EstatisticasProduto.calcular(ordenados),
           ultimoRegistro: ordenados.isEmpty ? null : ordenados.last,
-          porLoja: compararLojas(
-            precos: ordenados,
-            nomeDaLoja: nomeDaLoja,
-            nomeDoProduto: (id) => produtoPorId(id)?.nome ?? 'Produto $id',
-          ),
+          porLoja: porLoja,
+          empatados: indicesEmpatados(porLoja),
         ),
       );
     }
@@ -289,7 +319,8 @@ class EstadoApp extends ChangeNotifier {
       final dataB = b.estatisticas.dataUltimo ?? '';
       final porData = dataB.compareTo(dataA);
       if (porData != 0) return porData;
-      return normalizar(a.grupo.nome).compareTo(normalizar(b.grupo.nome));
+      return normalizar(a.grupo.nomeParaMostrar)
+          .compareTo(normalizar(b.grupo.nomeParaMostrar));
     });
     return resultado;
   }
@@ -337,13 +368,49 @@ class EstadoApp extends ChangeNotifier {
     return precos.isEmpty ? null : precos.last.unidadeRef;
   }
 
-  List<SugestaoGrupo> get sugestoesPendentes => gerarSugestoesGrupos(
+  // As duas listas de sugestao sao caras de montar e as telas pedem elas a
+  // cada rebuild. Como so mudam quando o conteudo muda, ficam guardadas.
+  CacheConteudo? _conteudoDasSugestoes;
+  List<SugestaoGrupo> _sugestoes = const <SugestaoGrupo>[];
+  List<SugestaoGenerica> _genericas = const <SugestaoGenerica>[];
+
+  void _calcularSugestoes() {
+    if (identical(_conteudoDasSugestoes, _conteudo)) return;
+
+    _genericas = gerarSugestoesGenericas(
+      grupos: _conteudo.grupos,
+      produtosDoGrupo: produtosDoGrupo,
+      unidadeDoGrupo: unidadeDoGrupo,
+      rejeitadas: {
+        for (final r in _conteudo.sugestoesGenericasRejeitadas) r.identidade,
+      },
+    );
+
+    // Um grupo que ja esta numa sugestao generica nao precisa aparecer
+    // tambem produto a produto: juntar os grupos resolve os dois casos.
+    final gruposNasGenericas = <int>{
+      for (final generica in _genericas)
+        for (final grupo in generica.grupos) grupo.id,
+    };
+    _sugestoes = <SugestaoGrupo>[
+      for (final sugestao in gerarSugestoesGrupos(
         produtos: _conteudo.produtos,
         grupos: _conteudo.grupos,
         vinculos: _conteudo.produtoGrupos,
         rejeitadas: _conteudo.sugestoesRejeitadas,
         unidadeDoProduto: unidadeDoProduto,
-      );
+      ))
+        if (!(sugestao.generica &&
+            gruposNasGenericas.contains(sugestao.grupo.id)))
+          sugestao,
+    ];
+    _conteudoDasSugestoes = _conteudo;
+  }
+
+  List<SugestaoGrupo> get sugestoesPendentes {
+    _calcularSugestoes();
+    return _sugestoes;
+  }
 
   SugestaoGrupo? melhorSugestaoParaProduto(int produtoId) {
     final vinculos = _conteudo.produtoGrupos
@@ -404,6 +471,108 @@ class EstadoApp extends ChangeNotifier {
       await conexao.fechar();
     }
     await sincronizar();
+  }
+
+  /// Liga ou desliga o botao "Comparar entre marcas" de um grupo.
+  Future<void> alternarCompararMarcas(int grupoId, bool ligado) async {
+    final grupo = grupoPorId(grupoId);
+    final resumo = grupo == null
+        ? null
+        : descreverGrupo(grupo: grupo, produtos: produtosDoGrupo(grupoId));
+    final conexao = abrirConexao();
+    try {
+      await conexao.definirIgnoraMarca(
+        grupoId,
+        ligado,
+        // Ao ligar, o nome que aparece passa a ser o nome sem marca.
+        nomeGenerico: ligado ? resumo?.nome : null,
+      );
+    } finally {
+      await conexao.fechar();
+    }
+    await sincronizar();
+  }
+
+  /// Sugestoes de juntar grupos de marcas diferentes num grupo generico.
+  List<SugestaoGenerica> get sugestoesGenericas {
+    _calcularSugestoes();
+    return _genericas;
+  }
+
+  /// Unidade de referencia do grupo: a gravada, ou a do preco mais recente.
+  String? unidadeDoGrupo(int grupoId) {
+    final gravada = (grupoPorId(grupoId)?.unidadeRef ?? '').trim();
+    if (gravada.isNotEmpty) return gravada;
+    for (final produto in produtosDoGrupo(grupoId)) {
+      final unidade = unidadeDoProduto(produto.id);
+      if ((unidade ?? '').trim().isNotEmpty) return unidade;
+    }
+    return null;
+  }
+
+  Future<void> aceitarSugestaoGenerica(SugestaoGenerica sugestao) async {
+    final conexao = abrirConexao();
+    try {
+      await conexao.juntarGruposGenerico(
+        grupoIds: sugestao.idsParaJuntar,
+        nomeGenerico: sugestao.nomeGenerico,
+        ignoraMarca: compararMarcasPadrao,
+      );
+    } finally {
+      await conexao.fechar();
+    }
+    await sincronizar();
+  }
+
+  /// Aceita varias sugestoes de uma vez, numa conexao so.
+  Future<void> aceitarSugestoesGenericas(
+    List<SugestaoGenerica> sugestoes,
+  ) async {
+    if (sugestoes.isEmpty) return;
+    final conexao = abrirConexao();
+    try {
+      for (final sugestao in sugestoes) {
+        await conexao.juntarGruposGenerico(
+          grupoIds: sugestao.idsParaJuntar,
+          nomeGenerico: sugestao.nomeGenerico,
+          ignoraMarca: compararMarcasPadrao,
+        );
+      }
+    } finally {
+      await conexao.fechar();
+    }
+    await sincronizar();
+  }
+
+  Future<void> rejeitarSugestaoGenerica(SugestaoGenerica sugestao) async {
+    final conexao = abrirConexao();
+    try {
+      await conexao.rejeitarSugestaoGenerica(sugestao.identidade);
+    } finally {
+      await conexao.fechar();
+    }
+    await sincronizar();
+  }
+
+  /// Monta a rota de compras dos grupos escolhidos.
+  ///
+  /// Num grupo generico a resposta ja vem com a marca e a embalagem mais
+  /// baratas por unidade de referencia.
+  List<ItemDaRota> itensDaRota(Iterable<int> grupoIds) {
+    final itens = <ItemDaRota>[];
+    for (final grupoId in grupoIds) {
+      final grupo = grupoPorId(grupoId);
+      if (grupo == null) continue;
+      itens.add(
+        montarItemDaRota(
+          grupo: grupo,
+          precos: precosDoGrupo(grupoId),
+          nomeDaLoja: nomeDaLoja,
+          produtoPorId: produtoPorId,
+        ),
+      );
+    }
+    return itens;
   }
 
   String nomeDaLoja(int lojaId) => lojasPorId[lojaId]?.nome ?? 'Loja $lojaId';

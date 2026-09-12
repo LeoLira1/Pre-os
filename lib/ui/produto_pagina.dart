@@ -38,11 +38,13 @@ class ProdutoPagina extends StatelessWidget {
         final historico = precos.reversed.toList();
 
         return Scaffold(
-          appBar: AppBar(title: Text(grupo.nome)),
+          appBar: AppBar(title: Text(grupo.nomeParaMostrar)),
           body: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
               _Cabecalho(grupo: grupo, produtos: produtos),
+              const SizedBox(height: 12),
+              _CompararEntreMarcas(estado: estado, grupo: grupo),
               const SizedBox(height: 12),
               _ProdutosDoGrupo(
                 estado: estado,
@@ -57,7 +59,9 @@ class ProdutoPagina extends StatelessWidget {
                   nomeDaLoja: estado.nomeDaLoja,
                   nomeDoProduto: (id) =>
                       estado.produtoPorId(id)?.nome ?? 'Produto $id',
+                  produtoPorId: estado.produtoPorId,
                 ),
+                generico: grupo.ignoraMarca,
                 nomeCurtoDaLoja: (id) =>
                     nomeCurtoLoja(estado.nomeDaLoja(id)),
               ),
@@ -120,10 +124,16 @@ class _Cabecalho extends StatelessWidget {
   Widget build(BuildContext context) {
     final textos = Theme.of(context).textTheme;
     final cores = Theme.of(context).colorScheme;
+    final marcas = produtos
+        .map((p) => (p.marca ?? '').trim())
+        .where((m) => m.isNotEmpty)
+        .toSet();
     final linhas = <String>[
       if ((grupo.unidadeRef ?? '').trim().isNotEmpty)
         'Unidade de comparação: ${grupo.unidadeRef}',
       '${produtos.length} produto${produtos.length == 1 ? '' : 's'} neste grupo',
+      if (grupo.ignoraMarca && marcas.isNotEmpty)
+        'Marcas comparadas: ${marcas.join(', ')}',
     ];
 
     return Card(
@@ -133,9 +143,17 @@ class _Cabecalho extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              grupo.nome,
+              grupo.nomeParaMostrar,
               style: textos.titleLarge?.copyWith(fontWeight: FontWeight.w600),
             ),
+            if (grupo.ignoraMarca) ...[
+              const SizedBox(height: 8),
+              Chip(
+                avatar: const Icon(Icons.compare_arrows, size: 18),
+                label: const Text('Comparando entre marcas'),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
             if ((grupo.categoria ?? '').trim().isNotEmpty) ...[
               const SizedBox(height: 8),
               Chip(
@@ -155,6 +173,115 @@ class _Cabecalho extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Liga e desliga a comparacao entre marcas deste grupo.
+///
+/// Ligado, o grupo passa a aceitar marcas e tamanhos de embalagem
+/// diferentes, desde que a unidade de referencia seja a mesma.
+class _CompararEntreMarcas extends StatefulWidget {
+  const _CompararEntreMarcas({required this.estado, required this.grupo});
+
+  final EstadoApp estado;
+  final Grupo grupo;
+
+  @override
+  State<_CompararEntreMarcas> createState() => _CompararEntreMarcasState();
+}
+
+class _CompararEntreMarcasState extends State<_CompararEntreMarcas> {
+  bool _ocupado = false;
+
+  Future<void> _alternar(bool ligado) async {
+    setState(() => _ocupado = true);
+    try {
+      await widget.estado.alternarCompararMarcas(widget.grupo.id, ligado);
+    } catch (erro) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$erro')));
+      }
+    } finally {
+      if (mounted) setState(() => _ocupado = false);
+    }
+  }
+
+  Future<void> _renomearGenerico() async {
+    final controle =
+        TextEditingController(text: widget.grupo.nomeParaMostrar);
+    final nome = await showDialog<String>(
+      context: context,
+      builder: (contexto) => AlertDialog(
+        title: const Text('Renomear grupo genérico'),
+        content: TextField(
+          controller: controle,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Nome sem marca e sem embalagem',
+            hintText: 'Água Sanitária',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(contexto),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(contexto, controle.text),
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+    controle.dispose();
+    if (nome == null || nome.trim().isEmpty || !mounted) return;
+    setState(() => _ocupado = true);
+    try {
+      await widget.estado.renomearGrupo(widget.grupo.id, nome);
+    } catch (erro) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$erro')));
+      }
+    } finally {
+      if (mounted) setState(() => _ocupado = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ligado = widget.grupo.ignoraMarca;
+    return Card(
+      child: Column(
+        children: [
+          SwitchListTile(
+            value: ligado,
+            onChanged: _ocupado ? null : _alternar,
+            secondary: const Icon(Icons.compare_arrows),
+            title: const Text('Comparar entre marcas'),
+            subtitle: Text(
+              ligado
+                  ? 'Marcas e embalagens diferentes entram neste grupo, desde '
+                      'que a unidade de comparação seja a mesma.'
+                  : 'Ligue para tratar todas as marcas deste produto como a '
+                      'mesma coisa e ver qual sai mais barata por '
+                      '${widget.grupo.unidadeRef ?? 'unidade'}.',
+            ),
+          ),
+          if (ligado) ...[
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Renomear grupo genérico'),
+              subtitle: Text(widget.grupo.nomeParaMostrar),
+              onTap: _ocupado ? null : _renomearGenerico,
+            ),
+          ],
+          if (_ocupado) const LinearProgressIndicator(),
+        ],
       ),
     );
   }
@@ -225,11 +352,13 @@ class _ProdutosDoGrupo extends StatelessWidget {
   }
 
   Future<void> _renomear(BuildContext context) async {
-    final controle = TextEditingController(text: grupo.nome);
+    final controle = TextEditingController(text: grupo.nomeParaMostrar);
     final nome = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Renomear produto base'),
+        title: Text(
+          grupo.ignoraMarca ? 'Renomear grupo genérico' : 'Renomear produto base',
+        ),
         content: TextField(controller: controle, autofocus: true),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
@@ -327,6 +456,7 @@ class _Numeros extends StatelessWidget {
     required this.estatisticas,
     required this.porLoja,
     required this.nomeCurtoDaLoja,
+    this.generico = false,
   });
 
   final EstatisticasProduto estatisticas;
@@ -334,6 +464,9 @@ class _Numeros extends StatelessWidget {
   /// Ultimo preco em cada loja, da mais barata para a mais cara.
   final List<PrecoNaLoja> porLoja;
   final String Function(int lojaId) nomeCurtoDaLoja;
+
+  /// Num grupo generico o "Mais barato hoje" diz tambem qual e a marca.
+  final bool generico;
 
   @override
   Widget build(BuildContext context) {
@@ -347,12 +480,16 @@ class _Numeros extends StatelessWidget {
     final cartoes = <Widget>[
       // Onde comprar agora, que e o que interessa na hora da compra.
       _Cartao(
-        titulo: 'Mais barato hoje',
+        titulo: generico ? 'Mais barato hoje (marca)' : 'Mais barato hoje',
         valor: barata == null
             ? '--'
             : formatarPrecoRef(barata.precoRef ?? barata.preco,
                 barata.precoRef == null ? null : barata.unidadeRef),
-        rodape: barata?.nomeLoja,
+        rodape: barata == null
+            ? null
+            : generico && barata.marcaEEmbalagem.isNotEmpty
+                ? '${barata.nomeLoja} · ${barata.marcaEEmbalagem}'
+                : barata.nomeLoja,
         cor: verde,
       ),
       _Cartao(

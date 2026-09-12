@@ -65,6 +65,8 @@ CREATE TABLE IF NOT EXISTS grupos (
   nome TEXT NOT NULL,
   categoria TEXT,
   unidade_ref TEXT,
+  ignora_marca INTEGER DEFAULT 0,
+  nome_generico TEXT,
   criado_em TEXT
 )''',
   '''
@@ -81,6 +83,11 @@ CREATE TABLE IF NOT EXISTS sugestoes_rejeitadas (
   criado_em TEXT,
   UNIQUE(produto_id, grupo_id)
 )''',
+  '''
+CREATE TABLE IF NOT EXISTS sugestoes_genericas_rejeitadas (
+  identidade TEXT PRIMARY KEY,
+  criado_em TEXT
+)''',
   'CREATE INDEX IF NOT EXISTS idx_precos_produto ON precos(produto_id)',
   'CREATE INDEX IF NOT EXISTS idx_precos_data ON precos(data)',
   'CREATE INDEX IF NOT EXISTS idx_apelidos_produto ON produto_apelidos(produto_id)',
@@ -96,6 +103,16 @@ CREATE TABLE IF NOT EXISTS sugestoes_rejeitadas (
 /// apagada ou recriada: os dados que ja estao no banco continuam intactos.
 const List<ColunaNova> colunasNovas = <ColunaNova>[
   ColunaNova(tabela: 'precos', coluna: 'importacao_id', tipo: 'INTEGER'),
+  // Fase 4: comparacao entre marcas. Um grupo com ignora_marca = 1 aceita
+  // produtos de marcas e de tamanhos de embalagem diferentes, desde que a
+  // unidade_ref seja a mesma. nome_generico guarda o nome sem marca e sem
+  // embalagem ("Agua Sanitaria").
+  ColunaNova(
+    tabela: 'grupos',
+    coluna: 'ignora_marca',
+    tipo: 'INTEGER DEFAULT 0',
+  ),
+  ColunaNova(tabela: 'grupos', coluna: 'nome_generico', tipo: 'TEXT'),
 ];
 
 /// Uma coluna que pode faltar em bancos criados por uma versao anterior.
